@@ -1,0 +1,80 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+enum TradeSide {
+  LONG
+  SHORT
+}
+
+model User {
+  id           String    @id @default(cuid())
+  googleId     String?   @unique
+  email        String    @unique
+  name         String
+  picture      String?
+  passwordHash String?
+  createdAt    DateTime  @default(now())
+  sessions  Session[]
+  trades    Trade[]
+  tags      Tag[]
+}
+
+model Session {
+  id                String   @id @default(cuid())
+  userId            String
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  deviceLabel       String?
+  deviceFingerprint String
+  ipAddress         String?
+  userAgent         String?
+  lastActiveAt      DateTime @default(now())
+  expiresAt         DateTime
+  revoked           Boolean  @default(false)
+  createdAt         DateTime @default(now())
+}
+
+model Trade {
+  id             String     @id @default(cuid())
+  userId         String
+  user           User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  symbol         String
+  side           TradeSide
+  entryPrice     Float
+  exitPrice      Float
+  lotSize        Float
+  openTime       DateTime
+  closeTime      DateTime
+  pnl            Float
+  fees           Float      @default(0)
+  rating         Int?
+  strategy       String?
+  notes          String?
+  screenshotPath String?
+  createdAt      DateTime   @default(now())
+  tradeTags      TradeTag[]
+}
+
+model Tag {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name      String
+  color     String
+  tradeTags TradeTag[]
+  @@unique([userId, name])
+}
+
+model TradeTag {
+  tradeId String
+  tagId   String
+  trade   Trade @relation(fields: [tradeId], references: [id], onDelete: Cascade)
+  tag     Tag   @relation(fields: [tagId], references: [id], onDelete: Cascade)
+  @@id([tradeId, tagId])
+}
+
