@@ -26,7 +26,8 @@ export default function DashboardPage() {
   const { data: mt5 } = useQuery({
     queryKey: ["mt5-positions"],
     queryFn: async () => (await api.get("/api/mt5/positions")).data,
-    refetchInterval: 5000,
+    staleTime: 60_000,
+    refetchInterval: false,
   });
   const livePositions = (mt5?.positions ?? []) as Array<{ symbol: string; side: string; profit: number; ticket: number }>;
   const totalTrades = toNumber(summary?.totalTrades);

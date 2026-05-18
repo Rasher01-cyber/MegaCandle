@@ -104,7 +104,7 @@ export function localMt5Enabled() {
 }
 
 const quoteCache = new Map<string, { at: number; quotes: LocalMt5BridgeResponse["quotes"] }>();
-const QUOTE_CACHE_MS = 1_500;
+const QUOTE_CACHE_MS = 3_000;
 
 export async function fetchLocalMt5Quotes(symbols: string[]): Promise<LocalMt5BridgeResponse["quotes"]> {
   if (!localMt5Enabled() || symbols.length === 0) return [];

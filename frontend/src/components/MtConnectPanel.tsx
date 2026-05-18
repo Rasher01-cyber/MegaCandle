@@ -9,7 +9,8 @@ export default function MtConnectPanel({ compact = false }: { compact?: boolean 
   const { data } = useQuery({
     queryKey: ["mt5-positions"],
     queryFn: async () => (await api.get("/api/mt5/positions")).data,
-    refetchInterval: 3000,
+    staleTime: 60_000,
+    refetchInterval: false,
   });
 
   const connected = Boolean(data?.connected);

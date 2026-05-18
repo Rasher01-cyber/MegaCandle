@@ -1,13 +1,14 @@
 import React, { Suspense, lazy, useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClientProvider } from "@tanstack/react-query";
+import { queryClient } from "./lib/queryClient";
 import { AuthProvider } from "./auth/AuthProvider";
 import RequireAuth from "./auth/RequireAuth";
 import StartupSplash from "./components/StartupSplash";
 import AppErrorBoundary from "./components/AppErrorBoundary";
 import AppLayout from "./components/AppLayout";
-import DashboardPage from "./pages/app/DashboardPage";
+const DashboardPage = lazy(() => import("./pages/app/DashboardPage"));
 
 const LandingPage = lazy(() => import("./pages/LandingPage"));
 const LoginPage = lazy(() => import("./pages/LoginPage"));
@@ -25,8 +26,6 @@ const LeaderboardPage = lazy(() => import("./pages/app/LeaderboardPage"));
 const SettingsPage = lazy(() => import("./pages/app/SettingsPage"));
 const MembershipPage = lazy(() => import("./pages/app/MembershipPage"));
 const NotFoundPage = lazy(() => import("./pages/NotFoundPage"));
-
-const queryClient = new QueryClient();
 
 export default function App() {
   const location = useLocation();

@@ -8,6 +8,7 @@ import { formatApiError } from "../../lib/formatApiError";
 import MtAutoLinkStatus from "../../components/MtAutoLinkStatus";
 import MtLiveAccounts from "../../components/MtLiveAccounts";
 import { formatPrice, useMt5Quotes } from "../../hooks/useMt5Quotes";
+import LazyTradingViewChart from "../../components/LazyTradingViewChart";
 import { tradingViewChartUrl, useMt5Live } from "../../hooks/useMt5Live";
 import { UiBadge, UiButton, UiCard, UiSectionHeader, UiSkeleton } from "../../components/ui";
 
@@ -52,8 +53,9 @@ export default function LiveMarketPage() {
   const { data, isLoading } = useQuery({
     queryKey: ["mt5-positions"],
     queryFn: async () => (await api.get("/api/mt5/positions")).data,
-    staleTime: 5_000,
+    staleTime: 120_000,
     refetchInterval: false,
+    placeholderData: (prev) => prev,
   });
 
   const refreshMt = useMutation({
@@ -223,7 +225,11 @@ export default function LiveMarketPage() {
             ))}
           </div>
         </div>
-        <iframe key={chartUrl} title={`${symbol} chart`} src={chartUrl} className="relative z-0 h-[380px] w-full border-0 md:h-[440px]" />
+        <LazyTradingViewChart
+          chartUrl={chartUrl}
+          symbol={symbol}
+          className="relative z-0 h-[380px] md:h-[440px]"
+        />
       </UiCard>
 
       <div className="relative z-20 grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)]">

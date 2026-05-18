@@ -40,7 +40,7 @@ import {
 
 export const mt5Router = Router();
 
-const LOCAL_SYNC_GAP_MS = 5_000;
+const LOCAL_SYNC_GAP_MS = 12_000;
 const LOCAL_SYNC_OK_TTL_MS = 120_000;
 
 const localSyncState = new Map<string, { lastAttempt: number; lastOk: number }>();
@@ -194,10 +194,11 @@ function accountPayload(account: {
 
 async function buildMt5Snapshot(
   userId: string,
-  options?: { forceSync?: boolean; skipSync?: boolean },
+  options?: { forceSync?: boolean; skipSync?: boolean; light?: boolean },
 ) {
-  await revokeHostedAccounts(userId);
-  await ensureBridgePairingAccount(userId);
+  if (!options?.light) {
+    await revokeHostedAccounts(userId);
+  }
   const bridge =
     (await getLinkedBridgeAccount(userId)) ??
     (await getDefaultBridgeAccount(userId)) ??
@@ -604,7 +605,7 @@ mt5Router.get("/mt5/symbols", requireAuth, async (_req: AuthRequest, res) => {
 });
 
 mt5Router.get("/mt5/positions", requireAuth, async (req: AuthRequest, res) => {
-  return res.json(await buildMt5Snapshot(req.auth!.userId, { skipSync: true }));
+  return res.json(await buildMt5Snapshot(req.auth!.userId, { skipSync: true, light: true }));
 });
 
 mt5Router.get("/mt5/quotes", requireAuth, async (req: AuthRequest, res) => {
@@ -647,7 +648,7 @@ mt5Router.post("/mt5/refresh", requireAuth, async (req: AuthRequest, res) => {
     }
   }
 
-  const snapshot = await buildMt5Snapshot(userId, { skipSync: true, forceSync: false });
+  const snapshot = await buildMt5Snapshot(userId, { skipSync: true, light: true });
   return res.json({
     ok: true,
     message: snapshot.bridgeLive
@@ -675,6 +676,7 @@ mt5Router.get("/mt5/stream", requireAuth, async (req: AuthRequest, res) => {
     const snapshot = await buildMt5Snapshot(req.auth!.userId, {
       skipSync: !forceSync,
       forceSync,
+      light: true,
     });
     res.write(`data: ${JSON.stringify(snapshot)}\n\n`);
   };
@@ -682,8 +684,8 @@ mt5Router.get("/mt5/stream", requireAuth, async (req: AuthRequest, res) => {
   await push(false);
   const timer = setInterval(() => {
     tick += 1;
-    void push(tick % 3 === 0);
-  }, 3000);
+    void push(tick % 5 === 0);
+  }, 5000);
 
   req.on("close", () => clearInterval(timer));
 });

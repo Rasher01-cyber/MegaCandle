@@ -58,7 +58,8 @@ export default function MtTerminalConnect({ pairingCode, compact = false }: { pa
   const { data: bridge } = useQuery({
     queryKey: ["mt5-bridge"],
     queryFn: async () => (await api.get("/api/mt5/bridge")).data,
-    refetchInterval: 4000,
+    staleTime: 60_000,
+    refetchInterval: false,
   });
 
   const { data: accounts } = useQuery({

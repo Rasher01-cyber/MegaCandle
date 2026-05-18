@@ -18,8 +18,8 @@ export function useMt5Quotes(symbols: string[], enabled: boolean) {
       return (res.data?.quotes ?? []) as MtQuote[];
     },
     enabled: enabled && symbols.length > 0,
-    refetchInterval: enabled ? 2_000 : false,
-    staleTime: 1_000,
+    refetchInterval: enabled ? 4_000 : false,
+    staleTime: 3_000,
     placeholderData: (prev) => prev,
   });
 }

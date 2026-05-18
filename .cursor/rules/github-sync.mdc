@@ -1,0 +1,14 @@
+---
+description: Push MegaCandle changes to GitHub after completing user-requested work
+alwaysApply: true
+---
+
+# GitHub sync (MegaCandle)
+
+After finishing a user-requested code change in this repo:
+
+1. Run `git status` and ensure no secrets are staged (`.env`, `MT5 Pass.txt`, `*.db`).
+2. Commit with a clear message describing **why**.
+3. Push to `origin master` on `https://github.com/Rasher01-cyber/MegaCandle.git`.
+
+Only commit/push when the user asked for changes or explicitly wants GitHub updated. Do not commit broken builds.
