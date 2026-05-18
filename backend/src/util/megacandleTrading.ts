@@ -209,15 +209,15 @@ export async function closeUserPosition(
   if (account.isHosted) return null;
 
   const password = getStoredMtPassword(account);
+  if (metaApiEnabled() && password) {
+    const closed = await metaApiCloseTrade(account, password, Number(row.ticket));
+    if (closed.ok) return { mode: "metaapi" as const, executed: true, ticket: row.ticket };
+    if (!localMt5Enabled() || !isBridgeLive(account)) return null;
+  }
   if (password && localMt5Enabled()) {
     const closed = await localMt5CloseTrade(account, password, Number(row.ticket));
     if (closed.ok) return { mode: "local" as const, executed: true, ticket: row.ticket };
     if (!isBridgeLive(account)) return null;
-  }
-  if (metaApiEnabled() && password) {
-    const ok = await metaApiCloseTrade(account, password, Number(row.ticket));
-    if (!ok) return null;
-    return { mode: "metaapi" as const, executed: true, ticket: row.ticket };
   }
 
   if (!isBridgeLive(account)) return null;
@@ -442,19 +442,18 @@ export async function resolveOrderAccount(
   if (!linked || !isBridgeLinked(linked)) return null;
 
   const password = getStoredMtPassword(linked);
-  let localOk = false;
-  if (password && localMt5Enabled()) {
-    const local = await syncLocalMt5Account(linked, password);
-    localOk = local.ok;
-  }
   const fresh = await prisma.mtAccount.findUnique({ where: { id: linked.id } });
   const account = fresh ?? linked;
 
-  if (password && localMt5Enabled() && localOk) {
-    return { account, mode: "local", bridgeLive: true };
-  }
   if (metaApiEnabled() && password) {
     return { account, mode: "metaapi", bridgeLive: true };
+  }
+
+  if (password && localMt5Enabled()) {
+    const local = await syncLocalMt5Account(linked, password);
+    if (local.ok) {
+      return { account, mode: "local", bridgeLive: true };
+    }
   }
 
   return {

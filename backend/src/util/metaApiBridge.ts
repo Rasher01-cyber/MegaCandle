@@ -159,32 +159,50 @@ export async function syncMetaApiPositions(account: MtAccount, password: string)
   return true;
 }
 
+export type MetaApiTradeResult =
+  | { ok: true; ticket: number; symbol: string }
+  | { ok: false; error: string };
+
 export async function metaApiOpenTrade(
   account: MtAccount,
   password: string,
   params: { symbol: string; side: TradeSide; volume: number; sl?: number; tp?: number },
-) {
-  const rpc = await connectMetaApiRpc(account, password);
-  if (!rpc) return null;
+): Promise<MetaApiTradeResult> {
+  try {
+    const rpc = await connectMetaApiRpc(account, password);
+    if (!rpc) return { ok: false, error: "Could not connect to cloud trading API." };
 
-  const sym = toBrokerSymbol(params.symbol);
-  const opts = { comment: "MegaCandle", magic: 88001 };
-  const res =
-    params.side === "LONG"
-      ? await rpc.createMarketBuyOrder(sym, params.volume, params.sl, params.tp, opts)
-      : await rpc.createMarketSellOrder(sym, params.volume, params.sl, params.tp, opts);
+    const sym = toBrokerSymbol(params.symbol);
+    const opts = { comment: "MegaCandle", magic: 88001 };
+    const res =
+      params.side === "LONG"
+        ? await rpc.createMarketBuyOrder(sym, params.volume, params.sl, params.tp, opts)
+        : await rpc.createMarketSellOrder(sym, params.volume, params.sl, params.tp, opts);
 
-  await syncMetaApiPositions(account, password);
-  const ticket = Number(res.positionId ?? res.orderId ?? 0);
-  return { ticket, symbol: sym };
+    await syncMetaApiPositions(account, password);
+    const ticket = Number(res.positionId ?? res.orderId ?? 0);
+    return { ok: true, ticket, symbol: sym };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return { ok: false, error: msg };
+  }
 }
 
-export async function metaApiCloseTrade(account: MtAccount, password: string, ticket: number) {
-  const rpc = await connectMetaApiRpc(account, password);
-  if (!rpc) return false;
-  await rpc.closePosition(String(ticket), { comment: "MegaCandle close" });
-  await syncMetaApiPositions(account, password);
-  return true;
+export async function metaApiCloseTrade(
+  account: MtAccount,
+  password: string,
+  ticket: number,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  try {
+    const rpc = await connectMetaApiRpc(account, password);
+    if (!rpc) return { ok: false, error: "Could not connect to cloud trading API." };
+    await rpc.closePosition(String(ticket), { comment: "MegaCandle close" });
+    await syncMetaApiPositions(account, password);
+    return { ok: true };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return { ok: false, error: msg };
+  }
 }
 
 export function getStoredMtPassword(account: MtAccount) {

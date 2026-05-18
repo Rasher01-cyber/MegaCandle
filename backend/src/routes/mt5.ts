@@ -37,6 +37,7 @@ import {
   localMt5OpenTrade,
   syncLocalMt5Account,
 } from "../util/localMt5";
+import { cloudTradingEnabled, tradingCapabilitiesMessage } from "../util/mtRouting";
 
 export const mt5Router = Router();
 
@@ -212,7 +213,25 @@ async function buildMt5Snapshot(
   const forceSync = options?.forceSync === true;
   const skipSync = options?.skipSync === true;
 
-  if (!skipSync && password && localMt5Enabled()) {
+  let useMetaApi = false;
+
+  if (!skipSync && password && cloudTradingEnabled()) {
+    if (shouldRunLocalSync(bridge.id, forceSync)) {
+      markLocalSyncAttempt(bridge.id);
+      try {
+        await syncMetaApiPositions(bridge, password);
+        markLocalSyncOk(bridge.id);
+        useMetaApi = true;
+      } catch (err) {
+        syncError = err instanceof Error ? err.message : "Cloud broker sync failed";
+        useMetaApi = localSyncRecentlyOk(bridge.id);
+      }
+    } else {
+      useMetaApi = localSyncRecentlyOk(bridge.id);
+    }
+  } else if (skipSync && password && cloudTradingEnabled()) {
+    useMetaApi = localSyncRecentlyOk(bridge.id) || Boolean(bridge.metaApiAccountId);
+  } else if (!skipSync && password && localMt5Enabled()) {
     if (shouldRunLocalSync(bridge.id, forceSync)) {
       markLocalSyncAttempt(bridge.id);
       const local = await syncLocalMt5Account(bridge, password);
@@ -229,15 +248,6 @@ async function buildMt5Snapshot(
   } else if (skipSync && password && localMt5Enabled()) {
     useLocal = localSyncRecentlyOk(bridge.id);
   }
-  const useMetaApi = !skipSync && !useLocal && metaApiEnabled() && Boolean(password);
-
-  if (useMetaApi && password) {
-    try {
-      await syncMetaApiPositions(bridge, password);
-    } catch {
-      /* show last known state */
-    }
-  }
 
   const bridgeLive = useLocal || useMetaApi || isBridgeLive(bridge);
 
@@ -253,7 +263,10 @@ async function buildMt5Snapshot(
       bridgeLinked: false,
       pendingCommands: 0,
       directConnect: metaApiEnabled() || localMt5Enabled(),
-    localMt5: useLocal,
+      localMt5: useLocal,
+      cloudTrading: cloudTradingEnabled(),
+      requiresTerminal: !cloudTradingEnabled() && localMt5Enabled(),
+      tradingHint: tradingCapabilitiesMessage(),
     };
   }
 
@@ -320,8 +333,20 @@ async function buildMt5Snapshot(
     lastSeenAt: fresh.lastSeenAt,
     bridgeWaiting: linked && !bridgeLive,
     syncError: syncError ?? null,
+    cloudTrading: cloudTradingEnabled(),
+    requiresTerminal: !cloudTradingEnabled() && localMt5Enabled(),
+    tradingHint: tradingCapabilitiesMessage(),
   };
 }
+
+mt5Router.get("/mt5/capabilities", requireAuth, async (_req: AuthRequest, res) => {
+  return res.json({
+    cloudTrading: cloudTradingEnabled(),
+    localTerminal: localMt5Enabled() && !cloudTradingEnabled(),
+    metaApiConfigured: metaApiEnabled(),
+    message: tradingCapabilitiesMessage(),
+  });
+});
 
 mt5Router.get("/mt5/accounts", requireAuth, async (req: AuthRequest, res) => {
   await revokeHostedAccounts(req.auth!.userId);
@@ -471,32 +496,33 @@ mt5Router.post("/mt5/connect", requireAuth, async (req: AuthRequest, res) => {
     },
   });
 
-  if (localMt5Enabled()) {
-    const local = await syncLocalMt5Account(updated, data.password);
-    if (local.ok) markLocalSyncOk(updated.id);
-    if (local.ok) {
-      const snapshot = await buildMt5Snapshot(req.auth!.userId, { forceSync: false });
-      return res.json({
-        ok: true,
-        message: "Connected to your MT5 terminal. Open positions and trades are synced.",
-        ...snapshot,
-      });
-    }
-  }
-
-  if (metaApiEnabled()) {
+  if (cloudTradingEnabled()) {
     try {
       await syncMetaApiPositions(updated, data.password);
-      const snapshot = await buildMt5Snapshot(req.auth!.userId);
+      markLocalSyncOk(updated.id);
+      const snapshot = await buildMt5Snapshot(req.auth!.userId, { skipSync: true, light: true });
       return res.json({
         ok: true,
-        message: "Connected to your MT5/MT4 account. Trades run on your broker.",
+        message: "Connected — trade from the website. No MetaTrader terminal needed.",
         ...snapshot,
       });
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Could not connect to broker";
       return res.status(502).json({
-        error: `Broker connection failed: ${msg}. Check login, password, and server.`,
+        error: `Cloud connection failed: ${msg}. Check login, password, and server name (e.g. MetaQuotes-Demo).`,
+      });
+    }
+  }
+
+  if (localMt5Enabled()) {
+    const local = await syncLocalMt5Account(updated, data.password);
+    if (local.ok) markLocalSyncOk(updated.id);
+    if (local.ok) {
+      const snapshot = await buildMt5Snapshot(req.auth!.userId, { skipSync: true, light: true });
+      return res.json({
+        ok: true,
+        message: "Connected to your MT5 terminal. Open positions and trades are synced.",
+        ...snapshot,
       });
     }
   }
@@ -614,10 +640,10 @@ mt5Router.get("/mt5/quotes", requireAuth, async (req: AuthRequest, res) => {
     0,
     12,
   );
-  if (!localMt5Enabled()) {
-    return res.json({ quotes: [], live: false });
+  if (!localMt5Enabled() || cloudTradingEnabled()) {
+    return res.json({ quotes: [], live: false, cloud: cloudTradingEnabled() });
   }
-  const quotes = await fetchLocalMt5Quotes(symbols);
+  const quotes = (await fetchLocalMt5Quotes(symbols)) ?? [];
   return res.json({ quotes, live: quotes.length > 0 });
 });
 
@@ -630,21 +656,23 @@ mt5Router.post("/mt5/refresh", requireAuth, async (req: AuthRequest, res) => {
   }
 
   const password = getStoredMtPassword(bridge);
-  if (password && localMt5Enabled()) {
+  if (password && cloudTradingEnabled()) {
+    markLocalSyncAttempt(bridge.id);
+    try {
+      await syncMetaApiPositions(bridge, password);
+      markLocalSyncOk(bridge.id);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Cloud sync failed";
+      return res.status(502).json({ error: msg });
+    }
+  } else if (password && localMt5Enabled()) {
     markLocalSyncAttempt(bridge.id);
     const local = await syncLocalMt5Account(bridge, password);
     if (local.ok) markLocalSyncOk(bridge.id);
-    if (!local.ok && !metaApiEnabled()) {
+    if (!local.ok) {
       return res.status(502).json({
         error: local.error ?? "Could not sync with MT5. Open MetaTrader 5 on this PC.",
       });
-    }
-  } else if (metaApiEnabled() && password) {
-    try {
-      await syncMetaApiPositions(bridge, password);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : "Broker sync failed";
-      return res.status(502).json({ error: msg });
     }
   }
 
@@ -700,11 +728,6 @@ mt5Router.post("/mt5/orders/open", requireAuth, async (req: AuthRequest, res) =>
     const linkedForOpen =
       (await getLinkedBridgeAccount(req.auth!.userId)) ??
       (await getDefaultBridgeAccount(req.auth!.userId));
-    const pwdForSync = linkedForOpen ? getStoredMtPassword(linkedForOpen) : null;
-    if (linkedForOpen && pwdForSync && localMt5Enabled()) {
-      await syncLocalMt5Account(linkedForOpen, pwdForSync);
-    }
-
     const resolved = await resolveOrderAccount(req.auth!.userId, parsed.data.accountId);
     if (!resolved) {
       return res.status(400).json({
@@ -749,21 +772,23 @@ mt5Router.post("/mt5/orders/open", requireAuth, async (req: AuthRequest, res) =>
         return res.status(400).json({ error: "Reconnect your MT5 account with password." });
       }
       const result = await metaApiOpenTrade(account, password, {
-        symbol: brokerSymbol,
+        symbol,
         side: parsed.data.side,
         volume: parsed.data.volume,
         sl: parsed.data.sl,
         tp: parsed.data.tp,
       });
-      if (!result) {
-        return res.status(502).json({ error: "Could not open trade on broker." });
+      if (!result.ok) {
+        return res.status(502).json({
+          error: result.error ?? "Could not open trade on broker.",
+        });
       }
       return res.status(201).json({
         executed: true,
         mode: "metaapi",
-        symbol: brokerSymbol,
+        symbol: result.symbol,
         ticket: result.ticket,
-        message: "Trade opened on your MT5/MT4 account.",
+        message: `Trade opened on ${result.symbol} (cloud — no terminal needed).`,
       });
     }
 

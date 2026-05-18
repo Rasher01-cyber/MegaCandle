@@ -84,7 +84,9 @@ export default function LiveMarketPage() {
   const account = data?.account as { balance?: number; equity?: number } | undefined;
   const positions = (data?.positions ?? []) as MtPosition[];
   const tradingAccountId = data?.tradingAccountId as string | undefined;
-  const canTrade = bridgeLive || (bridgeLinked && Boolean(data?.localMt5));
+  const cloudTrading = Boolean(data?.cloudTrading);
+  const canTrade =
+    bridgeLinked && (bridgeLive || cloudTrading || data?.mode === "metaapi");
 
   const { data: quotes = [] } = useMt5Quotes(symbols, bridgeLive || bridgeLinked);
   const quoteMap = useMemo(() => {
@@ -145,7 +147,11 @@ export default function LiveMarketPage() {
       <UiSectionHeader
         badge="Live trading"
         title="Live Market"
-        description="Trades execute on your MT5/MT4 broker account only — website and terminal stay in sync."
+        description={
+          cloudTrading
+            ? "Cloud trading — buy and sell from the website. No MetaTrader terminal required."
+            : "Connect your MT5/MT4 account to trade. Add METAAPI_TOKEN in backend for website-only trading."
+        }
         action={
           <MtAutoLinkStatus
             connected={bridgeLinked}
@@ -156,8 +162,14 @@ export default function LiveMarketPage() {
         }
       />
 
+      {cloudTrading && bridgeLinked ? (
+        <UiCard className="border-violet-500/35 bg-violet-500/10 p-3 text-xs text-violet-900 dark:text-violet-100">
+          Cloud mode — trades open and close on your broker from this website only. Balance and positions update live.
+        </UiCard>
+      ) : null}
+
       <MtLiveAccounts
-        bridgeLive={bridgeLive}
+        bridgeLive={bridgeLive || cloudTrading}
         bridgeLinked={bridgeLinked}
         accountLogin={bridgeBroker?.accountLogin}
         brokerServer={bridgeBroker?.brokerServer}

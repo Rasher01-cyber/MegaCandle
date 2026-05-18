@@ -235,7 +235,9 @@ export default function MtLiveAccounts({
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
             <h3 className="text-sm font-semibold text-slate-900 dark:text-white">MT5 / MT4 accounts</h3>
-            <p className="text-xs text-slate-500">Add, connect, or remove broker logins.</p>
+            <p className="text-xs text-slate-500">
+          Add login, password, and server — trades run from the website (no MT5 app when cloud trading is enabled).
+        </p>
           </div>
           <div className="flex gap-2">
             <UiButton
