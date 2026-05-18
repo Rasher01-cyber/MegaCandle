@@ -15,7 +15,7 @@ export default function LandingPage() {
   const faqs = [
     {
       q: "What is MegaCandle?",
-      a: "MegaCandle is a smart trading platform with live market, journaling, analytics, and guided learning.",
+      a: "MegaCandle is a smart trading platform with journaling, analytics, and guided learning.",
     },
     {
       q: "How does the MT5 sync work?",
@@ -66,8 +66,8 @@ export default function LandingPage() {
             <a className="text-sm text-slate-700 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white" href="#features">
               Features
             </a>
-            <a className="text-sm text-slate-700 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white" href="#community">
-              Community
+            <a className="text-sm text-slate-700 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white" href="#platform">
+              Platform
             </a>
             <a className="text-sm text-slate-700 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white" href="#pricing">
               Pricing
@@ -116,19 +116,33 @@ export default function LandingPage() {
             className="relative overflow-hidden rounded-2xl border border-slate-200 bg-gradient-to-br from-blue-500/15 via-white/70 to-white/80 p-6 shadow-2xl shadow-blue-200/40 dark:border-slate-500/20 dark:from-blue-500/20 dark:via-slate-900/70 dark:to-slate-900/90 dark:shadow-blue-900/20"
           >
             <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_80%_10%,rgba(59,130,246,0.3),transparent_45%)]" />
-            <div className="grid grid-cols-2 gap-3">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.1 }}
+              className="grid grid-cols-2 gap-3"
+            >
               {[
-                ["Today PnL", "+$2,847.50"],
-                ["Win Rate", "67.8%"],
-                ["Profit Factor", "1.94"],
-                ["Best Symbol", "XAUUSD"],
-              ].map(([k, v]) => (
-                <UiCard key={k} className="bg-white/55 p-3 dark:bg-slate-950/45">
-                  <div className="text-xs text-slate-600 dark:text-white/60">{k}</div>
-                  <div className="mt-1 text-lg font-semibold">{v}</div>
-                </UiCard>
+                { label: "Today PnL", value: "$0.00", accent: "text-slate-700 dark:text-slate-200" },
+                { label: "Win Rate", value: "—", accent: "text-blue-600 dark:text-blue-300" },
+                { label: "Profit Factor", value: "—", accent: "text-slate-700 dark:text-slate-200" },
+                { label: "Best Symbol", value: "—", accent: "text-slate-700 dark:text-slate-200" },
+              ].map((stat) => (
+                <motion.div
+                  key={stat.label}
+                  whileHover={{ scale: 1.02 }}
+                  className="rounded-xl border border-slate-200/80 bg-white/70 px-3 py-3 dark:border-white/10 dark:bg-slate-950/50"
+                >
+                  <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                    {stat.label}
+                  </p>
+                  <p className={`mt-1 text-lg font-bold ${stat.accent}`}>{stat.value}</p>
+                </motion.div>
               ))}
-            </div>
+            </motion.div>
+            <p className="mt-3 text-center text-xs text-slate-600 dark:text-white/55">
+              Live MT5 sync · chart · SL/TP · journal
+            </p>
             <UiCard className="mt-4 bg-white/55 p-4 dark:bg-slate-950/45">
               <div className="h-24 w-full rounded bg-gradient-to-r from-blue-500/18 via-cyan-400/10 to-transparent p-2">
                 <div className="flex h-full items-end gap-1.5">
@@ -164,10 +178,10 @@ export default function LandingPage() {
 
         <section className="mx-auto max-w-6xl py-4 grid gap-4 md:grid-cols-2">
           {[
-            ["Live Market Feed", "Track top symbols with live price, momentum, and volume updates."],
+            ["Watchlist & symbols", "Curate symbols, notes, and context so every session starts with a clear plan."],
             ["Smart Trade Ideas", "Get setup suggestions based on live volatility and direction bias."],
             ["Trading Academy", "Learn core concepts, execution, and risk control step by step."],
-            ["TradingView Workspace", "Analyze charts with pro tools and multi-timeframe context."],
+            ["Live Market", "Trade with charts, instant execution, and position management on MegaCandle Markets."],
           ].map(([feature, description], idx) => (
             <motion.div
               key={feature}
@@ -209,7 +223,7 @@ export default function LandingPage() {
             <h3 className="text-2xl font-semibold text-slate-900 dark:text-white">What You Can Track Daily</h3>
             <div className="mt-4 grid gap-3 md:grid-cols-2">
               {[
-                "Live market movers and symbol momentum",
+                "Watchlist symbols and volatility context",
                 "Session-based volatility and timing windows",
                 "Setup quality and strategy-level performance",
                 "Win rate, profit factor, expectancy, and drawdown",
@@ -224,16 +238,16 @@ export default function LandingPage() {
           </UiCard>
         </section>
 
-        <section id="community" className="mx-auto max-w-6xl py-10">
+        <section id="platform" className="mx-auto max-w-6xl py-10">
           <UiCard className="grid gap-6 p-6 md:grid-cols-2">
             <div>
-              <UiBadge className="mb-4">Community</UiBadge>
+              <UiBadge className="mb-4">Platform</UiBadge>
               <h3 className="text-3xl font-bold">Trade Together, Grow Together</h3>
               <p className="mt-3 text-slate-700 dark:text-slate-300">
                 Connect with thousands of traders, share ideas, and learn from high-quality trade journals.
               </p>
               <ul className="mt-4 space-y-2 text-sm text-slate-800 dark:text-slate-200">
-                <li className="inline-flex items-center gap-2"><Users size={14} /> Traders lounge</li>
+                <li className="inline-flex items-center gap-2"><Users size={14} /> Leaderboard &amp; insights</li>
                 <li className="inline-flex items-center gap-2"><Share2 size={14} /> Leaderboard & share cards</li>
                 <li className="inline-flex items-center gap-2"><Zap size={14} /> Real-time reactions</li>
               </ul>
@@ -413,7 +427,7 @@ export default function LandingPage() {
             <div>
               <BrandLogo compact />
               <p className="mt-4 text-sm leading-relaxed text-slate-400">
-                Your trading journal with MT5 sync, backtesting, AI reports, and a community of traders who care about getting better.
+                Your trading journal with MT5 sync, backtesting, AI reports, and tools built for traders who care about getting better.
               </p>
             </div>
 
@@ -422,7 +436,7 @@ export default function LandingPage() {
               <div className="mt-4 space-y-2 text-sm text-slate-400">
                 <a href="#features" className="block transition hover:text-white">Features</a>
                 <a href="#how-it-works" className="block transition hover:text-white">How It Works</a>
-                <a href="#community" className="block transition hover:text-white">Community</a>
+                <a href="#platform" className="block transition hover:text-white">Platform</a>
                 <a href="#pricing" className="block transition hover:text-white">Pricing</a>
                 <a href="#faq" className="block transition hover:text-white">FAQ</a>
               </div>
@@ -452,7 +466,7 @@ export default function LandingPage() {
           </div>
 
           <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-800 px-6 py-4 text-xs text-slate-500 md:px-8">
-            <span>© 2026 TradeFXBook. All rights reserved.</span>
+            <span>© 2026 MegaCandle. All rights reserved.</span>
             <span>Built for Traders, by Traders.</span>
           </div>
         </footer>

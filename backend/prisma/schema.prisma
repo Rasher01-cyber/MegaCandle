@@ -12,6 +12,23 @@ enum TradeSide {
   SHORT
 }
 
+enum MtPlatform {
+  MT4
+  MT5
+}
+
+enum MtCommandType {
+  OPEN
+  CLOSE
+}
+
+enum MtCommandStatus {
+  PENDING
+  DISPATCHED
+  EXECUTED
+  FAILED
+}
+
 model User {
   id           String    @id @default(cuid())
   googleId     String?   @unique
@@ -20,9 +37,10 @@ model User {
   picture      String?
   passwordHash String?
   createdAt    DateTime  @default(now())
-  sessions  Session[]
-  trades    Trade[]
-  tags      Tag[]
+  sessions     Session[]
+  trades       Trade[]
+  tags         Tag[]
+  mtAccounts   MtAccount[]
 }
 
 model Session {
@@ -76,5 +94,65 @@ model TradeTag {
   trade   Trade @relation(fields: [tradeId], references: [id], onDelete: Cascade)
   tag     Tag   @relation(fields: [tagId], references: [id], onDelete: Cascade)
   @@id([tradeId, tagId])
+}
+
+model MtAccount {
+  id               String       @id @default(cuid())
+  userId           String
+  user             User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  label            String       @default("MT5 Account")
+  platform         MtPlatform   @default(MT5)
+  apiTokenHash     String?
+  pairingCode      String       @unique
+  pairingExpiresAt DateTime
+  brokerName       String?
+  brokerServer     String?
+  accountLogin     String?
+  brokerPasswordEnc String?
+  metaApiAccountId  String?
+  balance          Float?
+  equity           Float?
+  connected        Boolean      @default(false)
+  lastSeenAt       DateTime?
+  revoked          Boolean      @default(false)
+  isHosted         Boolean      @default(false)
+  isDefault        Boolean      @default(false)
+  createdAt        DateTime     @default(now())
+  positions        MtPosition[]
+  commands         MtCommand[]
+}
+
+model MtPosition {
+  id           String    @id @default(cuid())
+  accountId    String
+  account      MtAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  ticket       BigInt
+  symbol       String
+  side         TradeSide
+  volume       Float
+  openPrice    Float
+  currentPrice Float
+  profit       Float     @default(0)
+  openTime     DateTime
+  updatedAt    DateTime  @updatedAt
+
+  @@unique([accountId, ticket])
+}
+
+model MtCommand {
+  id         String          @id @default(cuid())
+  accountId  String
+  account    MtAccount       @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  type       MtCommandType
+  status     MtCommandStatus @default(PENDING)
+  symbol     String?
+  side       TradeSide?
+  volume     Float?
+  ticket     BigInt?
+  sl         Float?
+  tp         Float?
+  errorMsg   String?
+  executedAt DateTime?
+  createdAt  DateTime        @default(now())
 }
 

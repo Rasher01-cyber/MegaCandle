@@ -15,17 +15,12 @@ const LegalPage = lazy(() => import("./pages/LegalPage"));
 const TradesPage = lazy(() => import("./pages/app/TradesPage"));
 const TradeDetailPage = lazy(() => import("./pages/app/TradeDetailPage"));
 const AnalyticsPage = lazy(() => import("./pages/app/AnalyticsPage"));
-const LiveMarketPage = lazy(() => import("./pages/app/LiveMarketPage"));
-const TradeIdeasPage = lazy(() => import("./pages/app/TradeIdeasPage"));
-const LearnPage = lazy(() => import("./pages/app/LearnPage"));
-const TradingViewPage = lazy(() => import("./pages/app/TradingViewPage"));
 const WatchlistPage = lazy(() => import("./pages/app/WatchlistPage"));
-const PositionsPage = lazy(() => import("./pages/app/PositionsPage"));
 const OrdersPage = lazy(() => import("./pages/app/OrdersPage"));
+const LiveMarketPage = lazy(() => import("./pages/app/LiveMarketPage"));
 const AlertsPage = lazy(() => import("./pages/app/AlertsPage"));
 const BacktestingPage = lazy(() => import("./pages/app/BacktestingPage"));
 const AiReportsPage = lazy(() => import("./pages/app/AiReportsPage"));
-const CommunityPage = lazy(() => import("./pages/app/CommunityPage"));
 const LeaderboardPage = lazy(() => import("./pages/app/LeaderboardPage"));
 const SettingsPage = lazy(() => import("./pages/app/SettingsPage"));
 const MembershipPage = lazy(() => import("./pages/app/MembershipPage"));
@@ -76,16 +71,15 @@ export default function App() {
                     <Route path="trades/:id" element={<TradeDetailPage />} />
                     <Route path="analytics" element={<AnalyticsPage />} />
                     <Route path="live-market" element={<LiveMarketPage />} />
-                    <Route path="trade-ideas" element={<TradeIdeasPage />} />
-                    <Route path="learn" element={<LearnPage />} />
-                    <Route path="tradingview" element={<TradingViewPage />} />
+                    <Route path="trade-ideas" element={<NotFoundPage />} />
+                    <Route path="learn" element={<NotFoundPage />} />
+                    <Route path="positions" element={<NotFoundPage />} />
                     <Route path="watchlist" element={<WatchlistPage />} />
-                    <Route path="positions" element={<PositionsPage />} />
                     <Route path="orders" element={<OrdersPage />} />
                     <Route path="alerts" element={<AlertsPage />} />
                     <Route path="backtesting" element={<BacktestingPage />} />
                     <Route path="ai-reports" element={<AiReportsPage />} />
-                    <Route path="community" element={<CommunityPage />} />
+                    <Route path="community" element={<NotFoundPage />} />
                     <Route path="leaderboard" element={<LeaderboardPage />} />
                     <Route path="settings" element={<SettingsPage />} />
                     <Route path="membership" element={<MembershipPage />} />

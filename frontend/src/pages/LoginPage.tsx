@@ -6,6 +6,7 @@ import { isAxiosError } from "axios";
 import { Mail } from "lucide-react";
 import { api } from "../lib/api";
 import { useAuth } from "../auth/AuthProvider";
+import { clearDemoWorkspaceMode } from "../lib/demoMode";
 import ThemeToggle from "../components/ThemeToggle";
 import GoogleSignInButton from "../components/GoogleSignInButton";
 import TradingVideoBackdrop from "../components/TradingVideoBackdrop";
@@ -87,6 +88,7 @@ function SignInCard({
           deviceLabel: deviceInfo.deviceLabel,
         });
       }
+      clearDemoWorkspaceMode();
       await refresh();
       const nextTarget = searchParams.get("next");
       if (isSignup) {
@@ -144,6 +146,7 @@ function SignInCard({
                   deviceFingerprint: deviceInfo.deviceFingerprintRaw,
                   deviceLabel: deviceInfo.deviceLabel,
                 });
+                clearDemoWorkspaceMode();
                 await refresh();
                 navigate(searchParams.get("next") || "/app/dashboard");
               } catch (err) {
@@ -396,7 +399,8 @@ export default function LoginPage() {
             <button
               type="button"
               onClick={async () => {
-                localStorage.setItem("tradefx_demo_mode", "1");
+                const { enableDemoWorkspaceMode } = await import("../lib/demoMode");
+                enableDemoWorkspaceMode();
                 await refresh();
                 navigate("/app/dashboard");
               }}

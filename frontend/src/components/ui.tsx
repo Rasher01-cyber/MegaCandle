@@ -70,7 +70,13 @@ export function UiButton({
 
   if (href) {
     return (
-      <a href={href} className={cx(base, byVariant, className)}>
+      <a
+        href={href}
+        onClick={() => {
+          onClick?.();
+        }}
+        className={cx(base, byVariant, className)}
+      >
         {children}
       </a>
     );

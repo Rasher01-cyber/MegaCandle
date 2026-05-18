@@ -7,6 +7,7 @@ import { config } from "../util/config";
 import { prisma } from "../util/prisma";
 import { hashDeviceFingerprint, signSessionToken } from "../util/auth";
 import { requireAuth, type AuthRequest } from "../middleware/requireAuth";
+import { ensureBridgePairingAccount, revokeHostedAccounts } from "../util/megacandleTrading";
 
 export const authRouter = Router();
 
@@ -125,6 +126,9 @@ authRouter.post("/auth/register", async (req, res) => {
   const { user: fullUser, session } = await issueAuthSession(req, res, user.id, deviceFingerprint, deviceLabel);
   if (!fullUser) return res.status(500).json({ error: "Could not create session" });
 
+  await revokeHostedAccounts(user.id);
+  await ensureBridgePairingAccount(user.id);
+
   return res.status(201).json({ user: userResponse(fullUser, session.id) });
 });
 
@@ -150,6 +154,9 @@ authRouter.post("/auth/login", async (req, res) => {
 
   const { user: fullUser, session } = await issueAuthSession(req, res, user.id, deviceFingerprint, deviceLabel);
   if (!fullUser) return res.status(500).json({ error: "Could not create session" });
+
+  await revokeHostedAccounts(user.id);
+  await ensureBridgePairingAccount(user.id);
 
   return res.json({ user: userResponse(fullUser, session.id) });
 });
@@ -227,6 +234,9 @@ authRouter.post("/auth/google", async (req, res) => {
 
   const { user: fullUser, session } = await issueAuthSession(req, res, user.id, body.deviceFingerprint, body.deviceLabel);
   if (!fullUser) return res.status(500).json({ error: "Could not create session" });
+
+  await revokeHostedAccounts(user.id);
+  await ensureBridgePairingAccount(user.id);
 
   return res.json({
     user: userResponse(fullUser, session.id),

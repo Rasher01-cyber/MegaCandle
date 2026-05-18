@@ -1,6 +1,6 @@
 # TradeFX Clone (MVP)
 
-Professional TradeFXBook-style web app with:
+Professional MegaCandle trading journal web app with:
 
 - React + Vite frontend
 - Express + Prisma + SQLite backend

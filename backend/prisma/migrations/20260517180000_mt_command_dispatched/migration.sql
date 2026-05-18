@@ -1,0 +1,2 @@
+-- Redefine enum values for SQLite (stored as TEXT)
+-- Prisma will accept DISPATCHED on new commands

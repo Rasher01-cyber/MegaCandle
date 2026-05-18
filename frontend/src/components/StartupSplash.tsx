@@ -20,7 +20,7 @@ export default function StartupSplash() {
             transition={{ duration: 1.2, repeat: Infinity, ease: "easeInOut" }}
           />
         </div>
-        <p className="text-xs uppercase tracking-[0.24em] text-cyan-200/80">Loading TradeFXBook</p>
+        <p className="text-xs uppercase tracking-[0.24em] text-cyan-200/80">Loading MegaCandle</p>
       </div>
     </div>
   );

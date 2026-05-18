@@ -11,3 +11,14 @@ build
 # Backend uploads
 backend/uploads/**/*.tmp
 
+# Local databases
+backend/prisma/*.db
+backend/prisma/*.db-journal
+
+# Never commit broker passwords or local credential notes
+MT5 Pass.txt
+*Pass*.txt
+
+# Build artifacts
+*.tsbuildinfo
+

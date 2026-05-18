@@ -1,9 +1,10 @@
 import React, { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
+import { Check, Clock3, HandCoins, PlusCircle, Search, Sparkles, Trash2, X } from "lucide-react";
 import { api } from "../../lib/api";
 import { UiBadge, UiButton, UiCard, UiEmptyState, UiSectionHeader, UiSkeleton } from "../../components/ui";
-import { Clock3, HandCoins, PlusCircle, Search, Trash2 } from "lucide-react";
+import { useSubscription } from "../../hooks/useSubscription";
 
 type Trade = {
   id: string;
@@ -18,6 +19,8 @@ type Trade = {
 
 export default function TradesPage() {
   const qc = useQueryClient();
+  const sub = useSubscription();
+  const [mtModalOpen, setMtModalOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [sideFilter, setSideFilter] = useState<"ALL" | "LONG" | "SHORT">("ALL");
   const [pnlFilter, setPnlFilter] = useState<"ALL" | "WINNERS" | "LOSERS">("ALL");
@@ -37,6 +40,8 @@ export default function TradesPage() {
     queryKey: ["trades"],
     queryFn: async () => (await api.get("/api/trades?page=1&pageSize=50")).data,
   });
+
+  const totalOnRecord = typeof data?.total === "number" ? data.total : 0;
 
   const createTrade = useMutation({
     mutationFn: async () => {
@@ -111,17 +116,34 @@ export default function TradesPage() {
         title="Trades"
         description="Track every execution with clean records, reliable filtering, and fast review."
         action={
-          <div className="flex gap-2">
-            <UiButton variant="ghost" onClick={() => seedDemo.mutate()} disabled={seedDemo.isPending}>
-              {seedDemo.isPending ? "Loading..." : "Load Demo"}
-            </UiButton>
-            <UiButton onClick={() => setCreateOpen((v) => !v)}>
-              <PlusCircle size={14} className="mr-1" />
-              {createOpen ? "Close Form" : "New Trade"}
-            </UiButton>
+          <div className="flex w-full flex-col gap-3 sm:w-auto sm:items-end">
+            <div className="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-400">
+              <span className={`h-2 w-2 shrink-0 rounded-full ${sub.hasAiReports ? "bg-emerald-500" : "bg-amber-500"}`} />
+              <span>{sub.hasAiReports ? "Pro tier — broker auto-sync when connected" : "Not connected"}</span>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <UiButton variant="ghost" onClick={() => setMtModalOpen(true)}>
+                Connect MT4/MT5
+              </UiButton>
+              <UiButton variant="ghost" onClick={() => seedDemo.mutate()} disabled={seedDemo.isPending}>
+                {seedDemo.isPending ? "Loading..." : "Load Demo"}
+              </UiButton>
+              <UiButton onClick={() => setCreateOpen((v) => !v)}>
+                <PlusCircle size={14} className="mr-1" />
+                {createOpen ? "Close Form" : "Add Trade"}
+              </UiButton>
+            </div>
           </div>
         }
       />
+
+      {!sub.hasAiReports ? (
+        <UiCard className="border-amber-200/80 bg-amber-50/90 p-3 text-sm text-amber-950 dark:border-amber-500/30 dark:bg-amber-950/30 dark:text-amber-50">
+          <span className="font-semibold">Free plan:</span> your workspace keeps full history here; AI summaries and broker auto-sync
+          require <span className="font-semibold">Pro or Elite</span> (monthly or yearly).{" "}
+          {totalOnRecord > 15 ? `You have ${totalOnRecord} trades on record — upgrade for full AI + sync roadmap.` : null}
+        </UiCard>
+      ) : null}
 
       {createOpen ? (
         <UiCard className="p-4">
@@ -222,6 +244,14 @@ export default function TradesPage() {
         </UiCard>
       ) : (
         <UiCard className="mt-4 overflow-hidden">
+          <div className="flex flex-col gap-2 border-b border-slate-200 px-4 py-3 dark:border-white/10 sm:flex-row sm:items-center sm:justify-between">
+            <div className="text-sm font-semibold text-slate-800 dark:text-slate-100">
+              Trade History ({sortedTrades.length} of {totalOnRecord || items.length} loaded)
+            </div>
+            <UiButton variant="ghost" className="px-3 py-1.5 text-xs">
+              Filters
+            </UiButton>
+          </div>
           {sortedTrades.length === 0 ? (
             <div className="p-4">
               <UiEmptyState
@@ -287,6 +317,77 @@ export default function TradesPage() {
           )}
         </UiCard>
       )}
+
+      {mtModalOpen ? (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/55 p-4 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="mt-sync-title"
+        >
+          <UiCard className="relative max-w-md p-6 shadow-2xl">
+            <button
+              type="button"
+              className="absolute right-3 top-3 rounded-lg p-1 text-slate-500 hover:bg-slate-100 hover:text-slate-800 dark:hover:bg-white/10 dark:hover:text-white"
+              onClick={() => setMtModalOpen(false)}
+              aria-label="Close"
+            >
+              <X size={18} />
+            </button>
+            {!sub.hasAiReports ? (
+              <>
+                <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-blue-600 text-white">
+                  <Sparkles size={22} />
+                </div>
+                <h2 id="mt-sync-title" className="mt-4 text-lg font-bold text-slate-900 dark:text-white">
+                  MT4/MT5 Auto-Sync
+                </h2>
+                <p className="mt-1 text-sm font-medium text-slate-700 dark:text-slate-300">Upgrade to Pro to connect your trading account</p>
+                <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-white/10 dark:bg-slate-950/50">
+                  <p className="text-sm font-medium text-slate-800 dark:text-slate-200">Connect your MT4 or MT5 account to:</p>
+                  <ul className="mt-3 space-y-2 text-sm text-slate-700 dark:text-slate-300">
+                    {[
+                      "Automatically sync all your trades",
+                      "Track real-time P&L and equity in the journal",
+                      "View performance analytics across accounts",
+                      "Journal trades with full context",
+                    ].map((t) => (
+                      <li key={t} className="flex gap-2">
+                        <Check className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" strokeWidth={2.5} />
+                        <span>{t}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+                <div className="mt-5 flex flex-wrap gap-2">
+                  <UiButton href="/app/membership?plan=pro&billing=monthly" className="flex-1 min-w-[8rem]" variant="primary" onClick={() => setMtModalOpen(false)}>
+                    Pro: 3 accounts
+                  </UiButton>
+                  <UiButton href="/app/membership?plan=elite&billing=yearly" className="flex-1 min-w-[8rem]" variant="ghost" onClick={() => setMtModalOpen(false)}>
+                    Elite: Unlimited
+                  </UiButton>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-600 text-white">
+                  <Check size={22} strokeWidth={3} />
+                </div>
+                <h2 id="mt-sync-title" className="mt-4 text-lg font-bold text-slate-900 dark:text-white">
+                  You&apos;re on {sub.tier.toUpperCase()}
+                </h2>
+                <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
+                  Live broker credential linking is not wired in this build. Your Pro/Elite membership is active — when MT sync ships,
+                  you&apos;ll connect from here without paying again.
+                </p>
+                <UiButton className="mt-5 w-full" variant="primary" onClick={() => setMtModalOpen(false)}>
+                  Got it
+                </UiButton>
+              </>
+            )}
+          </UiCard>
+        </div>
+      ) : null}
     </section>
   );
 }

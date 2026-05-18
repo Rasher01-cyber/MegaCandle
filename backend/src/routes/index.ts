@@ -4,6 +4,7 @@ import { sessionsRouter } from "./sessions";
 import { tradesRouter } from "./trades";
 import { tagsRouter } from "./tags";
 import { analyticsRouter } from "./analytics";
+import { mt5Router } from "./mt5";
 
 export function createApiRouter() {
   const router = Router();
@@ -12,6 +13,7 @@ export function createApiRouter() {
   router.use(tradesRouter);
   router.use(tagsRouter);
   router.use(analyticsRouter);
+  router.use(mt5Router);
   return router;
 }
 

@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { api } from "../lib/api";
+import { clearDemoWorkspaceMode, enableDemoWorkspaceMode, isDemoWorkspaceFlagSet } from "../lib/demoMode";
 
 export type AuthUser = {
   id: string;
@@ -12,6 +13,7 @@ export type AuthUser = {
 type AuthContextValue = {
   user: AuthUser | null;
   loading: boolean;
+  isDemoWorkspace: boolean;
   refresh: () => Promise<void>;
   logout: () => Promise<void>;
 };
@@ -29,8 +31,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   const refresh = async () => {
-    const demoEnabled = localStorage.getItem("tradefx_demo_mode") === "1";
-    if (demoEnabled) {
+    try {
+      const res = await api.get("/api/auth/me");
+      clearDemoWorkspaceMode();
+      setUser(res.data.user);
+      return;
+    } catch {
+      /* fall through to demo workspace if enabled */
+    }
+
+    if (isDemoWorkspaceFlagSet()) {
       setUser({
         id: "demo",
         email: "demo@megacandle.local",
@@ -40,18 +50,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       });
       return;
     }
-    try {
-      const res = await api.get("/api/auth/me");
-      setUser(res.data.user);
-    } catch {
-      setUser(null);
-    }
+
+    setUser(null);
   };
 
   const logout = async () => {
-    const demoEnabled = localStorage.getItem("tradefx_demo_mode") === "1";
-    if (demoEnabled) {
-      localStorage.removeItem("tradefx_demo_mode");
+    if (isDemoWorkspaceFlagSet()) {
+      clearDemoWorkspaceMode();
       setUser(null);
       return;
     }
@@ -60,6 +65,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } catch {
       /* still clear local user */
     }
+    clearDemoWorkspaceMode();
     setUser(null);
   };
 
@@ -70,7 +76,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const value = useMemo(() => ({ user, loading, refresh, logout }), [user, loading]);
+  const isDemoWorkspace = user?.id === "demo";
+
+  const value = useMemo(
+    () => ({ user, loading, isDemoWorkspace, refresh, logout }),
+    [user, loading, isDemoWorkspace],
+  );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

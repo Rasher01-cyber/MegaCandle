@@ -20,6 +20,8 @@ const EnvSchema = z.object({
   DATABASE_URL: z.string().min(1),
   FRONTEND_ORIGIN: z.string().min(1).default("http://localhost:5173"),
   UPLOAD_DIR: z.string().default("./uploads"),
+  /** MetaAPI cloud token — enables login+password direct MT5/MT4 trading without a local EA */
+  METAAPI_TOKEN: z.preprocess(normalizeOptionalSecret, z.string()),
 });
 
 export const config = EnvSchema.parse(process.env);
