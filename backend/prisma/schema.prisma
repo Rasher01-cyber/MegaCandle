@@ -12,6 +12,13 @@ enum TradeSide {
   SHORT
 }
 
+enum TradeSource {
+  JOURNAL
+  WEBSITE
+  MT5
+  MT4
+}
+
 enum MtPlatform {
   MT4
   MT5
@@ -69,13 +76,19 @@ model Trade {
   openTime       DateTime
   closeTime      DateTime
   pnl            Float
+  grossPnl       Float?
+  platformFee    Float      @default(0)
   fees           Float      @default(0)
+  mtTicket       BigInt?
   rating         Int?
   strategy       String?
   notes          String?
   screenshotPath String?
+  source         TradeSource @default(JOURNAL)
   createdAt      DateTime   @default(now())
   tradeTags      TradeTag[]
+
+  @@unique([userId, mtTicket])
 }
 
 model Tag {

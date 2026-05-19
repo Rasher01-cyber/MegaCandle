@@ -1,6 +1,5 @@
 import React, { Suspense, lazy, useEffect, useState } from "react";
-import { AnimatePresence, motion } from "framer-motion";
-import { Navigate, Route, Routes, useLocation } from "react-router-dom";
+import { Navigate, Route, Routes } from "react-router-dom";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { queryClient } from "./lib/queryClient";
 import { AuthProvider } from "./auth/AuthProvider";
@@ -17,8 +16,7 @@ const TradesPage = lazy(() => import("./pages/app/TradesPage"));
 const TradeDetailPage = lazy(() => import("./pages/app/TradeDetailPage"));
 const AnalyticsPage = lazy(() => import("./pages/app/AnalyticsPage"));
 const WatchlistPage = lazy(() => import("./pages/app/WatchlistPage"));
-const OrdersPage = lazy(() => import("./pages/app/OrdersPage"));
-const LiveMarketPage = lazy(() => import("./pages/app/LiveMarketPage"));
+const LiveMarketRedirect = lazy(() => import("./pages/app/LiveMarketRedirect"));
 const AlertsPage = lazy(() => import("./pages/app/AlertsPage"));
 const BacktestingPage = lazy(() => import("./pages/app/BacktestingPage"));
 const AiReportsPage = lazy(() => import("./pages/app/AiReportsPage"));
@@ -26,9 +24,9 @@ const LeaderboardPage = lazy(() => import("./pages/app/LeaderboardPage"));
 const SettingsPage = lazy(() => import("./pages/app/SettingsPage"));
 const MembershipPage = lazy(() => import("./pages/app/MembershipPage"));
 const NotFoundPage = lazy(() => import("./pages/NotFoundPage"));
+const ComingSoonPage = lazy(() => import("./pages/app/ComingSoonPage"));
 
 export default function App() {
-  const location = useLocation();
   const [showSplash, setShowSplash] = useState(true);
 
   useEffect(() => {
@@ -42,15 +40,7 @@ export default function App() {
         {showSplash ? <StartupSplash /> : null}
         <AppErrorBoundary>
           <Suspense fallback={<PageLoader />}>
-            <AnimatePresence mode="wait" initial={false}>
-              <motion.div
-                key={location.pathname}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -8 }}
-                transition={{ duration: 0.24, ease: "easeOut" }}
-              >
-                <Routes location={location}>
+            <Routes>
                   <Route path="/" element={<LandingPage />} />
                   <Route path="/login" element={<LoginPage />} />
                   <Route path="/privacy" element={<LegalPage />} />
@@ -69,25 +59,22 @@ export default function App() {
                     <Route path="trades" element={<TradesPage />} />
                     <Route path="trades/:id" element={<TradeDetailPage />} />
                     <Route path="analytics" element={<AnalyticsPage />} />
-                    <Route path="live-market" element={<LiveMarketPage />} />
-                    <Route path="trade-ideas" element={<NotFoundPage />} />
-                    <Route path="learn" element={<NotFoundPage />} />
-                    <Route path="positions" element={<NotFoundPage />} />
+                    <Route path="live-market" element={<LiveMarketRedirect />} />
+                    <Route path="trade-ideas" element={<ComingSoonPage title="Trade ideas" />} />
+                    <Route path="learn" element={<ComingSoonPage title="Learn" description="Educational content and playbooks are coming soon." />} />
+                    <Route path="positions" element={<Navigate to="/app/trades" replace />} />
                     <Route path="watchlist" element={<WatchlistPage />} />
-                    <Route path="orders" element={<OrdersPage />} />
                     <Route path="alerts" element={<AlertsPage />} />
                     <Route path="backtesting" element={<BacktestingPage />} />
                     <Route path="ai-reports" element={<AiReportsPage />} />
-                    <Route path="community" element={<NotFoundPage />} />
+                    <Route path="community" element={<ComingSoonPage title="Community" description="Social features and shared journals are coming soon." />} />
                     <Route path="leaderboard" element={<LeaderboardPage />} />
                     <Route path="settings" element={<SettingsPage />} />
                     <Route path="membership" element={<MembershipPage />} />
                   </Route>
 
                   <Route path="*" element={<NotFoundPage />} />
-                </Routes>
-              </motion.div>
-            </AnimatePresence>
+            </Routes>
           </Suspense>
         </AppErrorBoundary>
       </AuthProvider>
@@ -97,9 +84,10 @@ export default function App() {
 
 function PageLoader() {
   return (
-    <div className="min-h-screen flex items-center justify-center">
-      <div className="rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-sm text-white/70">
-        Loading...
+    <div className="flex min-h-[50vh] items-center justify-center p-6">
+      <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white/80 px-4 py-3 text-sm text-slate-600 shadow-lg dark:border-white/10 dark:bg-slate-900/80 dark:text-slate-300">
+        <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-blue-500 border-t-transparent" />
+        Loading workspace…
       </div>
     </div>
   );

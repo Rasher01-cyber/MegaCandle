@@ -10,7 +10,9 @@ export function formatApiError(err: unknown, fallback: string): string {
       error?: string;
       issues?: Array<{ message?: string }>;
     };
-    if (typeof data?.error === "string" && data.error.trim()) return data.error;
+    if (typeof data?.error === "string" && data.error.trim()) {
+      return humanizeTradingError(data.error);
+    }
     if (Array.isArray(data?.issues) && data.issues.length > 0) {
       return data.issues.map((i) => i.message ?? "Invalid field").join(" · ");
     }
@@ -22,6 +24,17 @@ export function formatApiError(err: unknown, fallback: string): string {
     }
     return `${fallback} (HTTP ${err.response.status})`;
   }
-  if (err instanceof Error && err.message.trim()) return err.message;
+  if (err instanceof Error && err.message.trim()) return humanizeTradingError(err.message);
   return fallback;
+}
+
+function humanizeTradingError(raw: string): string {
+  const lower = raw.toLowerCase();
+  if (lower.includes("10018") || lower.includes("market closed")) {
+    return "Market is closed for this symbol. Try during session hours or use EURUSD / XAUUSD.";
+  }
+  if (lower.includes("retcode")) {
+    return raw.replace(/\(\([^)]*\)\)/g, "").replace(/retcode[=:]?\s*\d+\s*/i, "").trim() || raw;
+  }
+  return raw;
 }

@@ -5,6 +5,8 @@ import { useTheme } from "../../theme/ThemeProvider";
 import { api } from "../../lib/api";
 import { setActiveMtAccountId } from "../../lib/activeMtAccount";
 import { formatApiError } from "../../lib/formatApiError";
+import { notifyActivity } from "../../lib/activityNotify";
+import { runMt5HistorySyncSafe } from "../../lib/mt5Sync";
 import MtAutoLinkStatus from "../../components/MtAutoLinkStatus";
 import MtLiveAccounts from "../../components/MtLiveAccounts";
 import { formatPrice, useMt5Quotes } from "../../hooks/useMt5Quotes";
@@ -28,7 +30,9 @@ type MtPosition = {
 const DEFAULT_SYMBOLS = ["EURUSD", "GBPUSD", "USDJPY", "XAUUSD", "US30"] as const;
 const LOT_PRESETS = ["0.01", "0.05", "0.10", "0.50", "1.00"];
 
-export default function LiveMarketPage() {
+type Props = { embedded?: boolean };
+
+export default function LiveMarketPage({ embedded = false }: Props) {
   const qc = useQueryClient();
   const { theme } = useTheme();
   const [symbols, setSymbols] = useState<string[]>([...DEFAULT_SYMBOLS]);
@@ -59,12 +63,14 @@ export default function LiveMarketPage() {
   });
 
   const refreshMt = useMutation({
-    mutationFn: async () => (await api.post("/api/mt5/refresh")).data,
+    mutationFn: async () => runMt5HistorySyncSafe(qc, { notify: true, force: true }),
     onSuccess: (res) => {
-      setMsg((res?.message as string) ?? "Refreshed.");
-      void qc.invalidateQueries({ queryKey: ["mt5-positions"] });
+      setMsg(res?.message ?? "Refreshed.");
     },
-    onError: (err: unknown) => setMsg(formatApiError(err, "Sync failed")),
+    onError: (err: unknown) => {
+      const text = formatApiError(err, "Sync failed");
+      setMsg(text);
+    },
   });
 
   const chartUrl = useMemo(
@@ -81,14 +87,18 @@ export default function LiveMarketPage() {
     brokerServer?: string;
     accountLogin?: string;
   } | undefined;
-  const account = data?.account as { balance?: number; equity?: number } | undefined;
+  const account = data?.account as { balance?: number; equity?: number; floatingProfit?: number } | undefined;
   const positions = (data?.positions ?? []) as MtPosition[];
+  const openPnlSum = useMemo(() => {
+    if (typeof account?.floatingProfit === "number") return account.floatingProfit;
+    return positions.reduce((s, p) => s + Number(p.profit ?? 0), 0);
+  }, [account?.floatingProfit, positions]);
   const tradingAccountId = data?.tradingAccountId as string | undefined;
   const cloudTrading = Boolean(data?.cloudTrading);
   const canTrade =
     bridgeLinked && (bridgeLive || cloudTrading || data?.mode === "metaapi");
 
-  const { data: quotes = [] } = useMt5Quotes(symbols, bridgeLive || bridgeLinked);
+  const { data: quotes = [] } = useMt5Quotes(symbols, bridgeLinked || bridgeLive || cloudTrading);
   const quoteMap = useMemo(() => {
     const m = new Map<string, (typeof quotes)[0]>();
     for (const q of quotes) m.set(q.symbol.toUpperCase(), q);
@@ -114,10 +124,18 @@ export default function LiveMarketPage() {
       ).data;
     },
     onSuccess: (res) => {
-      setMsg((res?.message as string) ?? `Trade opened on ${symbol}`);
+      const text = (res?.message as string) ?? `Trade opened on ${symbol}`;
+      setMsg(text);
+      notifyActivity(text, "trade");
       void qc.invalidateQueries({ queryKey: ["mt5-positions"] });
+      void qc.invalidateQueries({ queryKey: ["trades"] });
+      void qc.invalidateQueries({ queryKey: ["summary"] });
     },
-    onError: (err: unknown) => setMsg(formatApiError(err, "Failed to open trade")),
+    onError: (err: unknown) => {
+      const text = formatApiError(err, "Failed to open trade");
+      setMsg(text);
+      notifyActivity(text, "error");
+    },
   });
 
   const closeTrade = useMutation({
@@ -133,39 +151,42 @@ export default function LiveMarketPage() {
     },
     onSuccess: (res) => {
       setClosingId(null);
-      setMsg((res?.message as string) ?? "Position closed on your MT5/MT4 account.");
+      const text = (res?.message as string) ?? "Position closed.";
+      setMsg(text);
+      notifyActivity(text, "trade");
       void qc.invalidateQueries({ queryKey: ["mt5-positions"] });
+      void qc.invalidateQueries({ queryKey: ["trades"] });
+      void qc.invalidateQueries({ queryKey: ["summary"] });
+      void qc.invalidateQueries({ queryKey: ["analytics-calendar"] });
     },
     onError: (err: unknown) => {
       setClosingId(null);
-      setMsg(formatApiError(err, "Failed to close"));
+      const text = formatApiError(err, "Failed to close");
+      setMsg(text);
+      notifyActivity(text, "error");
     },
   });
 
   return (
-    <section className="space-y-6 relative z-10">
-      <UiSectionHeader
-        badge="Live trading"
-        title="Live Market"
-        description={
-          cloudTrading
-            ? "Cloud trading — buy and sell from the website. No MetaTrader terminal required."
-            : "Connect your MT5/MT4 account to trade. Add METAAPI_TOKEN in backend for website-only trading."
-        }
-        action={
-          <MtAutoLinkStatus
-            connected={bridgeLinked}
-            bridgeLive={bridgeLive}
-            accountSaved={bridgeLinked && !bridgeLive}
-            accountLogin={bridgeBroker?.accountLogin}
-          />
-        }
-      />
-
-      {cloudTrading && bridgeLinked ? (
-        <UiCard className="border-violet-500/35 bg-violet-500/10 p-3 text-xs text-violet-900 dark:text-violet-100">
-          Cloud mode — trades open and close on your broker from this website only. Balance and positions update live.
-        </UiCard>
+    <div className={embedded ? "space-y-6 relative z-10" : "space-y-6 relative z-10"}>
+      {!embedded ? (
+        <UiSectionHeader
+          badge="Live trading"
+          title="Live Market"
+          description={
+            cloudTrading
+              ? "Cloud trading — buy and sell from the website. No MetaTrader terminal required."
+              : "Connect your MT5/MT4 account to trade. Add METAAPI_TOKEN in backend for website-only trading."
+          }
+          action={
+            <MtAutoLinkStatus
+              connected={bridgeLinked}
+              bridgeLive={bridgeLive}
+              accountSaved={bridgeLinked && !bridgeLive}
+              accountLogin={bridgeBroker?.accountLogin}
+            />
+          }
+        />
       ) : null}
 
       <MtLiveAccounts
@@ -180,9 +201,39 @@ export default function LiveMarketPage() {
         onMessage={setMsg}
       />
 
+      {bridgeLinked && account ? (
+        <UiCard className="relative z-10 grid gap-3 p-4 sm:grid-cols-3">
+          <div className="text-center sm:text-left">
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Open P/L</p>
+            <p
+              className={`mt-1 text-xl font-bold tabular-nums ${
+                openPnlSum >= 0 ? "text-emerald-600" : "text-rose-600"
+              }`}
+            >
+              {openPnlSum >= 0 ? "+" : ""}
+              {openPnlSum.toFixed(2)}
+            </p>
+          </div>
+          <div className="text-center">
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Balance</p>
+            <p className="mt-1 text-xl font-bold tabular-nums text-slate-900 dark:text-white">
+              ${Number(account.balance ?? 0).toFixed(2)}
+            </p>
+          </div>
+          <div className="text-center sm:text-right">
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Equity</p>
+            <p className="mt-1 text-xl font-bold tabular-nums text-slate-900 dark:text-white">
+              ${Number(account.equity ?? 0).toFixed(2)}
+            </p>
+          </div>
+        </UiCard>
+      ) : null}
+
       {symbols.length > 0 ? (
         <UiCard className="relative z-10 p-3">
-          <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-slate-500">Live prices (MT5)</p>
+          <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+            Live prices {cloudTrading ? "(cloud)" : "(MT5)"}
+          </p>
           <div className="flex gap-2 overflow-x-auto pb-1">
             {symbols.map((s) => {
               const q = quoteMap.get(s.toUpperCase());
@@ -353,7 +404,7 @@ export default function LiveMarketPage() {
             </div>
           </div>
 
-          <div className="mt-4 min-h-[140px] overflow-hidden rounded-xl border border-slate-200 dark:border-white/10">
+          <div className="mt-4 min-h-[140px] overflow-x-auto rounded-xl border border-slate-200 dark:border-white/10">
             <table className="w-full text-left text-sm">
               <thead className="bg-slate-100 text-[10px] uppercase text-slate-500 dark:bg-white/5">
                 <tr>
@@ -417,6 +468,6 @@ export default function LiveMarketPage() {
           </div>
         </UiCard>
       </div>
-    </section>
+    </div>
   );
 }

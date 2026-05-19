@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import json
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 try:
     import MetaTrader5 as mt5
@@ -23,6 +23,43 @@ def emit(obj: dict) -> None:
 
 def side_from_mt5(pos_type: int) -> str:
     return "LONG" if pos_type == 0 else "SHORT"  # POSITION_TYPE_BUY = 0
+
+
+def fetch_closed_trades(days: int = 365) -> list[dict]:
+    """Pair IN/OUT deals per position_id — matches MT5 History tab."""
+    DEAL_ENTRY_IN = 0
+    DEAL_ENTRY_OUT = 1
+    to_date = datetime.now(timezone.utc) + timedelta(hours=1)
+    from_date = to_date - timedelta(days=max(1, days))
+    deals = mt5.history_deals_get(from_date, to_date)
+    if deals is None:
+        return []
+
+    ins: dict[int, object] = {}
+    closed: list[dict] = []
+    for d in sorted(deals, key=lambda x: int(x.time)):
+        pid = int(d.position_id)
+        if int(d.entry) == DEAL_ENTRY_IN:
+            ins[pid] = d
+        elif int(d.entry) == DEAL_ENTRY_OUT:
+            entry = ins.pop(pid, None)
+            if entry is None:
+                continue
+            closed.append(
+                {
+                    "ticket": int(d.ticket),
+                    "symbol": str(d.symbol),
+                    "side": side_from_mt5(int(entry.type)),
+                    "volume": float(d.volume),
+                    "openPrice": float(entry.price),
+                    "closePrice": float(d.price),
+                    "openTime": datetime.fromtimestamp(int(entry.time), tz=timezone.utc).isoformat(),
+                    "closeTime": datetime.fromtimestamp(int(d.time), tz=timezone.utc).isoformat(),
+                    "commission": float(d.commission or 0) + float(entry.commission or 0),
+                    "profit": float(d.profit or 0),
+                }
+            )
+    return closed
 
 
 def order_ok(retcode: int) -> bool:
@@ -165,6 +202,8 @@ def send_market_order(sym: str, side: str, volume: float) -> tuple[bool, str, in
     if result is not None and order_ok(result.retcode):
         return True, sym, int(result.order or result.deal or 0)
 
+    if "10018" in last_comment or "market closed" in last_comment.lower():
+        return False, "Market is closed for this symbol. Try during trading hours or use EURUSD / XAUUSD.", 0
     err = mt5.last_error()
     return False, f"Order rejected: {last_comment} ({err})".strip(), 0
 
@@ -273,6 +312,7 @@ def main() -> None:
                     }
                 )
 
+        closed_deals = fetch_closed_trades(365)
         emit(
             {
                 "ok": True,
@@ -281,7 +321,9 @@ def main() -> None:
                 "brokerName": str(info.company),
                 "balance": float(info.balance),
                 "equity": float(info.equity),
+                "profit": float(info.profit),
                 "positions": pos_list,
+                "closedDeals": closed_deals,
             }
         )
         mt5.shutdown()

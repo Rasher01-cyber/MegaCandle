@@ -16,8 +16,6 @@ import {
   Settings,
   Shield,
   Sparkles,
-  SquareActivity,
-  Radio,
   Trophy,
   WalletCards,
   X,
@@ -26,6 +24,9 @@ import ThemeToggle from "./ThemeToggle";
 import { useAutoMt5Connect } from "../hooks/useAutoMt5Connect";
 import BrandLogo from "./BrandLogo";
 import { clearNotifications, getNotifications, type AppNotification } from "../lib/notifications";
+import ActivityNotificationBar from "./ActivityNotificationBar";
+import PageTransition from "./PageTransition";
+import { useMt5HistorySync } from "../hooks/useMt5HistorySync";
 
 type NavItem = {
   to: string;
@@ -37,10 +38,8 @@ type NavItem = {
 const navItems: NavItem[] = [
   { to: "/app/dashboard", label: "Dashboard", icon: Gauge },
   { to: "/app/trades", label: "Trades", icon: ClipboardList },
-  { to: "/app/live-market", label: "Live Market", icon: Radio },
   { to: "/app/analytics", label: "Analytics", icon: ChartCandlestick },
   { to: "/app/watchlist", label: "Watchlist", icon: ListPlus },
-  { to: "/app/orders", label: "Orders", icon: SquareActivity },
   { to: "/app/alerts", label: "Alerts", icon: Bell },
   { to: "/app/ai-reports", label: "AI Reports", icon: Sparkles, tierBadge: "PRO" },
   { to: "/app/backtesting", label: "Backtesting", icon: Shield, tierBadge: "ELITE" },
@@ -98,6 +97,7 @@ export default function AppLayout() {
   const { user } = useAuth();
   const sub = useSubscription();
   useAutoMt5Connect();
+  useMt5HistorySync(true);
   const [menuOpen, setMenuOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchFocused, setSearchFocused] = useState(false);
@@ -188,8 +188,13 @@ export default function AppLayout() {
     setNotifications(getNotifications());
   }, [notifyOpen, location.pathname]);
 
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [location.pathname]);
+
   return (
     <div className="app-grid-bg min-h-screen text-slate-900 dark:text-white md:grid md:grid-cols-[260px_1fr]">
+      <ActivityNotificationBar />
       {menuOpen && (
         <button
           className="fixed inset-0 z-30 bg-black/60 md:hidden"
@@ -306,7 +311,7 @@ export default function AppLayout() {
               <div className="flex h-9 w-[4.5rem] shrink-0 items-center justify-end gap-2 sm:w-[10.75rem]">
                 <ThemeToggle className="hidden sm:inline-flex" />
                 <Link
-                  to="/app/live-market"
+                  to="/app/trades"
                   className="hidden h-9 min-w-[5.75rem] items-center justify-center rounded-xl border border-blue-400/40 bg-blue-600 px-3 text-xs font-semibold text-white shadow-md shadow-blue-600/25 transition hover:bg-blue-500 sm:inline-flex"
                 >
                   Take Trade
@@ -410,7 +415,9 @@ export default function AppLayout() {
           </div>
         ) : null}
         <main className="p-4 sm:p-6">
-          <Outlet />
+          <PageTransition>
+            <Outlet />
+          </PageTransition>
         </main>
       </div>
     </div>

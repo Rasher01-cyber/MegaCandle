@@ -1,10 +1,11 @@
 import { Router } from "express";
-import { TradeSide } from "@prisma/client";
+import { TradeSide, TradeSource } from "@prisma/client";
 import { z } from "zod";
 import { requireAuth, type AuthRequest } from "../middleware/requireAuth";
 import { prisma } from "../util/prisma";
 import { computePnl } from "../util/calc";
 import { upload } from "../util/upload";
+import { serializeTrade } from "../util/tradeSource";
 
 export const tradesRouter = Router();
 const demoSymbols = ["XAUUSD", "EURUSD", "GBPUSD", "US30", "BTCUSD"];
@@ -26,7 +27,7 @@ const tradeSchema = z.object({
 
 const tradeListQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
-  pageSize: z.coerce.number().int().min(1).max(100).default(20),
+  pageSize: z.coerce.number().int().min(1).max(200).default(100),
   symbol: z.string().max(20).optional(),
 });
 
@@ -54,7 +55,12 @@ tradesRouter.get("/trades", requireAuth, async (req: AuthRequest, res) => {
     prisma.trade.count({ where }),
   ]);
 
-  res.json({ items, total, page, pageSize });
+  res.json({
+    items: items.map((t) => serializeTrade(t)),
+    total,
+    page,
+    pageSize,
+  });
 });
 
 tradesRouter.post("/trades", requireAuth, async (req: AuthRequest, res) => {
@@ -86,6 +92,7 @@ tradesRouter.post("/trades", requireAuth, async (req: AuthRequest, res) => {
       rating: body.rating ?? null,
       strategy: body.strategy ?? null,
       notes: body.notes ?? null,
+      source: TradeSource.JOURNAL,
       tradeTags: body.tagIds?.length
         ? {
             create: body.tagIds.map((tagId) => ({
@@ -96,7 +103,7 @@ tradesRouter.post("/trades", requireAuth, async (req: AuthRequest, res) => {
     },
     include: { tradeTags: { include: { tag: true } } },
   });
-  res.status(201).json({ trade });
+  res.status(201).json({ trade: serializeTrade(trade) });
 });
 
 tradesRouter.get("/trades/:id", requireAuth, async (req: AuthRequest, res) => {
@@ -108,7 +115,7 @@ tradesRouter.get("/trades/:id", requireAuth, async (req: AuthRequest, res) => {
   if (!trade || trade.userId !== req.auth!.userId) {
     return res.status(404).json({ error: "Trade not found" });
   }
-  return res.json({ trade });
+  return res.json({ trade: serializeTrade(trade) });
 });
 
 tradesRouter.put("/trades/:id", requireAuth, async (req: AuthRequest, res) => {
@@ -156,7 +163,7 @@ tradesRouter.put("/trades/:id", requireAuth, async (req: AuthRequest, res) => {
       });
     }
   }
-  return res.json({ trade });
+  return res.json({ trade: serializeTrade(trade) });
 });
 
 tradesRouter.delete("/trades/:id", requireAuth, async (req: AuthRequest, res) => {
@@ -221,6 +228,7 @@ tradesRouter.post("/trades/seed-demo", requireAuth, async (req: AuthRequest, res
         closeTime,
         notes: `Demo trade #${i + 1}`,
         strategy: i % 2 === 0 ? "Breakout" : "Pullback",
+        source: TradeSource.JOURNAL,
       },
     });
   }

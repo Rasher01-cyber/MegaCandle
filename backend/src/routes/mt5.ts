@@ -1,9 +1,12 @@
 import { Router } from "express";
-import { MtCommandStatus, MtCommandType, TradeSide } from "@prisma/client";
+import { MtCommandStatus, MtCommandType, MtPlatform, TradeSide } from "@prisma/client";
 import { z } from "zod";
 import { requireAuth, type AuthRequest } from "../middleware/requireAuth";
 import { requireMtAuth, type MtAuthRequest } from "../middleware/requireMtAuth";
 import { prisma } from "../util/prisma";
+import { importMtClosedDeals } from "../util/importMtDeals";
+import { formatTradingError } from "../util/mtErrors";
+import { syncBrokerAccount } from "../util/syncBrokerAccount";
 import {
   closeUserPosition,
   createBridgeAccount,
@@ -27,13 +30,16 @@ import {
   getStoredMtPassword,
   metaApiEnabled,
   metaApiOpenTrade,
+  fetchMetaApiQuotes,
   syncMetaApiPositions,
 } from "../util/metaApiBridge";
 import { parseMt5DateTime } from "../util/mt5Date";
 import {
   fetchLocalMt5Quotes,
   listLocalMt5Symbols,
+  localMt5BridgeAvailable,
   localMt5Enabled,
+  localMt5HistorySyncEnabled,
   localMt5OpenTrade,
   syncLocalMt5Account,
 } from "../util/localMt5";
@@ -215,19 +221,23 @@ async function buildMt5Snapshot(
 
   let useMetaApi = false;
 
-  if (!skipSync && password && cloudTradingEnabled()) {
+  if (!skipSync && password && (cloudTradingEnabled() || localMt5HistorySyncEnabled())) {
     if (shouldRunLocalSync(bridge.id, forceSync)) {
       markLocalSyncAttempt(bridge.id);
       try {
-        await syncMetaApiPositions(bridge, password);
-        markLocalSyncOk(bridge.id);
-        useMetaApi = true;
+        const sync = await syncBrokerAccount(bridge);
+        if (sync.cloudOk) useMetaApi = true;
+        if (sync.localOk) useLocal = true;
+        if (sync.localOk || sync.cloudOk) markLocalSyncOk(bridge.id);
+        if (sync.errors.length) syncError = formatTradingError(sync.errors[0]);
       } catch (err) {
-        syncError = err instanceof Error ? err.message : "Cloud broker sync failed";
+        syncError = formatTradingError(err instanceof Error ? err.message : "Broker sync failed");
         useMetaApi = localSyncRecentlyOk(bridge.id);
+        useLocal = localSyncRecentlyOk(bridge.id);
       }
     } else {
       useMetaApi = localSyncRecentlyOk(bridge.id);
+      useLocal = localSyncRecentlyOk(bridge.id);
     }
   } else if (skipSync && password && cloudTradingEnabled()) {
     useMetaApi = localSyncRecentlyOk(bridge.id) || Boolean(bridge.metaApiAccountId);
@@ -289,6 +299,7 @@ async function buildMt5Snapshot(
     where: { accountId: bridge.id },
     orderBy: { openTime: "desc" },
   });
+  const floatingProfit = positions.reduce((sum, p) => sum + p.profit, 0);
 
   const pendingCommands =
     !useMetaApi && bridgeLive
@@ -311,7 +322,7 @@ async function buildMt5Snapshot(
   return {
     connected: bridgeLive,
     mode,
-    account: accountPayload(fresh),
+    account: { ...accountPayload(fresh), floatingProfit },
     positions,
     bridgePairingCode: bridge.pairingCode,
     bridgeLive,
@@ -640,11 +651,25 @@ mt5Router.get("/mt5/quotes", requireAuth, async (req: AuthRequest, res) => {
     0,
     12,
   );
-  if (!localMt5Enabled() || cloudTradingEnabled()) {
-    return res.json({ quotes: [], live: false, cloud: cloudTradingEnabled() });
+  const userId = req.auth!.userId;
+  const bridge = (await getLinkedBridgeAccount(userId)) ?? (await getDefaultBridgeAccount(userId));
+  const password = bridge ? getStoredMtPassword(bridge) : null;
+
+  if (cloudTradingEnabled() && bridge && password) {
+    const quotes = await fetchMetaApiQuotes(bridge, password, symbols);
+    if (quotes.length > 0) {
+      return res.json({ quotes, live: true, cloud: true });
+    }
   }
-  const quotes = (await fetchLocalMt5Quotes(symbols)) ?? [];
-  return res.json({ quotes, live: quotes.length > 0 });
+
+  if (localMt5BridgeAvailable() && bridge && password) {
+    const quotes = (await fetchLocalMt5Quotes(symbols)) ?? [];
+    if (quotes.length > 0) {
+      return res.json({ quotes, live: true, cloud: false });
+    }
+  }
+
+  return res.json({ quotes: [], live: false, cloud: cloudTradingEnabled() });
 });
 
 /** Force broker sync (MetaAPI cloud or wait for terminal bridge). */
@@ -655,34 +680,33 @@ mt5Router.post("/mt5/refresh", requireAuth, async (req: AuthRequest, res) => {
     return res.status(400).json({ error: "Connect your MT5 account first." });
   }
 
-  const password = getStoredMtPassword(bridge);
-  if (password && cloudTradingEnabled()) {
-    markLocalSyncAttempt(bridge.id);
-    try {
-      await syncMetaApiPositions(bridge, password);
-      markLocalSyncOk(bridge.id);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : "Cloud sync failed";
-      return res.status(502).json({ error: msg });
-    }
-  } else if (password && localMt5Enabled()) {
-    markLocalSyncAttempt(bridge.id);
-    const local = await syncLocalMt5Account(bridge, password);
-    if (local.ok) markLocalSyncOk(bridge.id);
-    if (!local.ok) {
-      return res.status(502).json({
-        error: local.error ?? "Could not sync with MT5. Open MetaTrader 5 on this PC.",
-      });
-    }
-  }
+  markLocalSyncAttempt(bridge.id);
+  const sync = await syncBrokerAccount(bridge);
+  if (sync.localOk || sync.cloudOk) markLocalSyncOk(bridge.id);
 
   const snapshot = await buildMt5Snapshot(userId, { skipSync: true, light: true });
+  const historyMsg =
+    sync.historyImported > 0
+      ? ` Imported ${sync.historyImported} trade(s) from MT5.`
+      : sync.dealsFound > 0
+        ? " History already up to date."
+        : localMt5HistorySyncEnabled()
+          ? " Open MetaTrader 5 on this PC to pull history."
+          : "";
+
+  const errHint = sync.errors.length ? formatTradingError(sync.errors[0]) : null;
+
   return res.json({
-    ok: true,
-    message: snapshot.bridgeLive
-      ? "Synced with your MT5/MT4 account."
-      : (snapshot.syncError as string | null) ??
-        "Waiting for MT5 — open MetaTrader 5 on this PC and click Sync MT5 again.",
+    ok: sync.localOk || sync.cloudOk,
+    historyImported: sync.historyImported,
+    dealsFound: sync.dealsFound,
+    syncErrors: sync.errors,
+    message:
+      sync.localOk || sync.cloudOk
+        ? `Synced with your account.${historyMsg}`
+        : errHint ??
+          (snapshot.syncError as string | null) ??
+          "Connect MT5 with login/password, keep the terminal open, then sync again.",
     ...snapshot,
   });
 });
@@ -709,7 +733,7 @@ mt5Router.get("/mt5/stream", requireAuth, async (req: AuthRequest, res) => {
     res.write(`data: ${JSON.stringify(snapshot)}\n\n`);
   };
 
-  await push(false);
+  await push(true);
   const timer = setInterval(() => {
     tick += 1;
     void push(tick % 5 === 0);
@@ -752,9 +776,24 @@ mt5Router.post("/mt5/orders/open", requireAuth, async (req: AuthRequest, res) =>
       });
       if (!result.ok) {
         return res.status(502).json({
-          error:
+          error: formatTradingError(
             result.error ??
-            "Could not open trade in MT5. Open MetaTrader 5, enable Algo Trading (green), and keep the terminal running.",
+              "Could not open trade in MT5. Open MetaTrader 5, enable Algo Trading (green), and keep the terminal running.",
+          ),
+        });
+      }
+      if (result.ticket) {
+        await prisma.mtCommand.create({
+          data: {
+            accountId: account.id,
+            type: MtCommandType.OPEN,
+            status: MtCommandStatus.EXECUTED,
+            symbol: brokerSymbol,
+            side: parsed.data.side,
+            volume: parsed.data.volume,
+            ticket: BigInt(result.ticket),
+            executedAt: new Date(),
+          },
         });
       }
       return res.status(201).json({
@@ -780,7 +819,21 @@ mt5Router.post("/mt5/orders/open", requireAuth, async (req: AuthRequest, res) =>
       });
       if (!result.ok) {
         return res.status(502).json({
-          error: result.error ?? "Could not open trade on broker.",
+          error: formatTradingError(result.error ?? "Could not open trade on broker."),
+        });
+      }
+      if (result.ticket) {
+        await prisma.mtCommand.create({
+          data: {
+            accountId: account.id,
+            type: MtCommandType.OPEN,
+            status: MtCommandStatus.EXECUTED,
+            symbol: brokerSymbol,
+            side: parsed.data.side,
+            volume: parsed.data.volume,
+            ticket: BigInt(result.ticket),
+            executedAt: new Date(),
+          },
         });
       }
       return res.status(201).json({
@@ -1034,28 +1087,9 @@ mt5Router.post("/integrations/mt5/sync", requireMtAuth, async (req: MtAuthReques
     });
   }
 
-  for (const deal of body.closedDeals) {
-    const existing = await prisma.trade.findFirst({
-      where: { userId, notes: { contains: `MT5 ticket ${deal.ticket}` } },
-    });
-    if (existing) continue;
-
-    await prisma.trade.create({
-      data: {
-        userId,
-        symbol: deal.symbol.toUpperCase(),
-        side: deal.side,
-        entryPrice: deal.openPrice,
-        exitPrice: deal.closePrice,
-        lotSize: deal.volume,
-        openTime: deal.openTime,
-        closeTime: deal.closeTime,
-        fees: Math.abs(deal.commission),
-        pnl: deal.profit,
-        notes: `Synced from MT5 · ticket ${deal.ticket}`,
-        strategy: "MegaCandle Live",
-      },
-    });
+  const accountPlatform = account?.platform ?? MtPlatform.MT5;
+  if (body.closedDeals.length > 0) {
+    await importMtClosedDeals(userId, accountId, accountPlatform, body.closedDeals);
   }
 
   return res.json({ ok: true });

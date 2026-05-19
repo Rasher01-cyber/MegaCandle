@@ -1,4 +1,5 @@
 import React from "react";
+import { Link } from "react-router-dom";
 
 type State = { hasError: boolean; message: string };
 
@@ -38,9 +39,12 @@ export default class AppErrorBoundary extends React.Component<React.PropsWithChi
               >
                 Refresh
               </button>
-              <a href="/" className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold hover:bg-slate-50 dark:border-slate-600 dark:hover:bg-slate-900">
+              <Link
+                to="/"
+                className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold hover:bg-slate-50 dark:border-slate-600 dark:hover:bg-slate-900"
+              >
                 Go Home
-              </a>
+              </Link>
             </div>
           </div>
         </div>

@@ -1,4 +1,9 @@
 import React from "react";
+import { Link } from "react-router-dom";
+
+function isInternalPath(href: string) {
+  return href.startsWith("/") && !href.startsWith("//");
+}
 
 function cx(...items: Array<string | undefined | false>) {
   return items.filter(Boolean).join(" ");
@@ -69,12 +74,17 @@ export function UiButton({
         : "border border-slate-300 bg-white/80 text-slate-900 hover:bg-white dark:border-slate-300/20 dark:bg-white/5 dark:text-white dark:hover:bg-white/10";
 
   if (href) {
+    if (isInternalPath(href)) {
+      return (
+        <Link to={href} onClick={onClick} className={cx(base, byVariant, className)}>
+          {children}
+        </Link>
+      );
+    }
     return (
       <a
         href={href}
-        onClick={() => {
-          onClick?.();
-        }}
+        onClick={onClick}
         className={cx(base, byVariant, className)}
       >
         {children}

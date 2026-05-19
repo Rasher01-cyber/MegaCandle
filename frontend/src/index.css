@@ -114,6 +114,18 @@ html.dark .trading-bg-grid {
   }
 }
 
+@keyframes megacandle-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.5);
+  }
+  50% {
+    opacity: 0.92;
+    box-shadow: 0 0 0 6px rgba(59, 130, 246, 0);
+  }
+}
+
 @keyframes trading-grid-drift {
   0% {
     background-position: 0 0;

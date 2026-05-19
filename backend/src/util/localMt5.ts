@@ -2,6 +2,7 @@ import { spawn } from "child_process";
 import path from "path";
 import type { MtAccount, TradeSide } from "@prisma/client";
 import { prisma } from "./prisma";
+import { importMtClosedDeals, type MtClosedDealInput } from "./importMtDeals";
 
 export type LocalMt5Position = {
   ticket: number;
@@ -22,7 +23,9 @@ export type LocalMt5BridgeResponse = {
   brokerName?: string;
   balance?: number;
   equity?: number;
+  profit?: number;
   positions?: LocalMt5Position[];
+  closedDeals?: MtClosedDealInput[];
   symbols?: string[];
   btcusdAvailable?: boolean;
   ticket?: number;
@@ -36,7 +39,7 @@ export type LocalMt5BridgeResponse = {
   }>;
 };
 
-export type LocalMt5SyncResult = LocalMt5BridgeResponse;
+export type LocalMt5SyncResult = LocalMt5BridgeResponse & { historyImported?: number };
 
 const scriptPath = path.resolve(__dirname, "../../scripts/mt5_bridge.py");
 
@@ -99,15 +102,25 @@ function runPythonBridge(payload: Record<string, unknown>): Promise<LocalMt5Brid
   });
 }
 
+/** Live trading + quotes via local MT5 terminal. */
 export function localMt5Enabled() {
   return process.env.LOCAL_MT5_ENABLED !== "0";
+}
+
+/** Import history / sync from MT5 app (can stay on when cloud executes trades). */
+export function localMt5HistorySyncEnabled() {
+  return process.env.LOCAL_MT5_HISTORY_SYNC !== "0";
+}
+
+export function localMt5BridgeAvailable() {
+  return localMt5Enabled() || localMt5HistorySyncEnabled();
 }
 
 const quoteCache = new Map<string, { at: number; quotes: LocalMt5BridgeResponse["quotes"] }>();
 const QUOTE_CACHE_MS = 3_000;
 
 export async function fetchLocalMt5Quotes(symbols: string[]): Promise<LocalMt5BridgeResponse["quotes"]> {
-  if (!localMt5Enabled() || symbols.length === 0) return [];
+  if (!localMt5BridgeAvailable() || symbols.length === 0) return [];
   const key = symbols.map((s) => s.toUpperCase()).sort().join(",");
   const cached = quoteCache.get(key);
   if (cached && Date.now() - cached.at < QUOTE_CACHE_MS) return cached.quotes ?? [];
@@ -159,8 +172,10 @@ export async function probeLocalMt5(): Promise<boolean> {
 export async function syncLocalMt5Account(
   account: MtAccount,
   password: string,
-): Promise<LocalMt5BridgeResponse> {
-  if (!localMt5Enabled()) return { ok: false, error: "Local MT5 disabled" };
+): Promise<LocalMt5SyncResult> {
+  if (!localMt5BridgeAvailable()) {
+    return { ok: false, error: "Local MT5 bridge disabled (set LOCAL_MT5_HISTORY_SYNC=1 in backend/.env)" };
+  }
 
   const login = parseInt(account.accountLogin ?? "0", 10);
   if (!login || !account.brokerServer) {
@@ -224,7 +239,18 @@ export async function syncLocalMt5Account(
     });
   }
 
-  return result;
+  let historyImported = 0;
+  const closedDeals = result.closedDeals ?? [];
+  if (closedDeals.length > 0) {
+    historyImported = await importMtClosedDeals(
+      account.userId,
+      account.id,
+      account.platform,
+      closedDeals,
+    );
+  }
+
+  return { ...result, historyImported };
 }
 
 export type LocalTradeResult =

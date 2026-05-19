@@ -1,4 +1,4 @@
-import { MtAccount, MtCommandType, TradeSide } from "@prisma/client";
+import { MtAccount, MtCommandType, TradeSide, TradeSource } from "@prisma/client";
 import { prisma } from "./prisma";
 import { generatePairingCode } from "./mt5Tokens";
 import {
@@ -163,21 +163,8 @@ export async function closeHostedTrade(account: MtAccount, ticket: number | bigi
   await refreshHostedAccount(account.id);
 
   try {
-  await prisma.trade.create({
-    data: {
-      userId,
-      symbol: position.symbol,
-      side: position.side,
-      entryPrice: position.openPrice,
-      exitPrice: closePrice,
-      lotSize: position.volume,
-      openTime: position.openTime,
-      closeTime: new Date(),
-      pnl,
-      notes: `MegaCandle hosted · ticket ${ticket}`,
-      strategy: "MegaCandle Live",
-    },
-  });
+    const { journalWebsiteClose } = await import("./journalWebsiteClose");
+    await journalWebsiteClose(account, position, closePrice, pnl);
   } catch {
     /* journal entry optional — position close still counts */
   }
@@ -210,13 +197,31 @@ export async function closeUserPosition(
 
   const password = getStoredMtPassword(account);
   if (metaApiEnabled() && password) {
+    const grossPnl = row.profit;
+    const closePrice = row.currentPrice;
     const closed = await metaApiCloseTrade(account, password, Number(row.ticket));
-    if (closed.ok) return { mode: "metaapi" as const, executed: true, ticket: row.ticket };
+    if (closed.ok) {
+      try {
+        const { journalWebsiteClose } = await import("./journalWebsiteClose");
+        await journalWebsiteClose(account, row, closePrice, grossPnl);
+      } catch {
+        /* sync may import later */
+      }
+      return { mode: "metaapi" as const, executed: true, ticket: row.ticket };
+    }
     if (!localMt5Enabled() || !isBridgeLive(account)) return null;
   }
   if (password && localMt5Enabled()) {
     const closed = await localMt5CloseTrade(account, password, Number(row.ticket));
-    if (closed.ok) return { mode: "local" as const, executed: true, ticket: row.ticket };
+    if (closed.ok) {
+      try {
+        const { journalWebsiteClose } = await import("./journalWebsiteClose");
+        await journalWebsiteClose(account, row, row.currentPrice, row.profit);
+      } catch {
+        /* history sync may also import */
+      }
+      return { mode: "local" as const, executed: true, ticket: row.ticket };
+    }
     if (!isBridgeLive(account)) return null;
   }
 

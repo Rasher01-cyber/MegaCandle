@@ -3,6 +3,7 @@ import { config } from "./config";
 import { decryptMtSecret } from "./mtSecrets";
 import { prisma } from "./prisma";
 import { toBrokerSymbol } from "./mtSymbols";
+import { formatTradingError } from "./mtErrors";
 
 type MetaApiAccountLike = {
   id: string;
@@ -42,6 +43,9 @@ type MetaRpc = {
     options?: { comment?: string; magic?: number },
   ) => Promise<{ orderId?: string | number; positionId?: string | number }>;
   closePosition: (positionId: string, options?: { comment?: string }) => Promise<void>;
+  getSymbolPrice?: (
+    symbol: string,
+  ) => Promise<{ bid: number; ask: number; time?: Date | string } | undefined>;
 };
 
 type MetaApiCtor = new (token: string) => {
@@ -184,7 +188,7 @@ export async function metaApiOpenTrade(
     return { ok: true, ticket, symbol: sym };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    return { ok: false, error: msg };
+    return { ok: false, error: formatTradingError(msg) };
   }
 }
 
@@ -201,7 +205,30 @@ export async function metaApiCloseTrade(
     return { ok: true };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    return { ok: false, error: msg };
+    return { ok: false, error: formatTradingError(msg) };
+  }
+}
+
+export async function fetchMetaApiQuotes(account: MtAccount, password: string, symbols: string[]) {
+  try {
+    const rpc = await connectMetaApiRpc(account, password);
+    if (!rpc?.getSymbolPrice) return [];
+    const quotes: Array<{ symbol: string; bid: number; ask: number; spread: number; time: number }> = [];
+    for (const sym of symbols) {
+      const broker = toBrokerSymbol(sym);
+      const price = await rpc.getSymbolPrice(broker);
+      if (!price) continue;
+      quotes.push({
+        symbol: sym.toUpperCase(),
+        bid: price.bid,
+        ask: price.ask,
+        spread: price.ask - price.bid,
+        time: price.time ? Math.floor(new Date(price.time).getTime() / 1000) : Math.floor(Date.now() / 1000),
+      });
+    }
+    return quotes;
+  } catch {
+    return [];
   }
 }
 

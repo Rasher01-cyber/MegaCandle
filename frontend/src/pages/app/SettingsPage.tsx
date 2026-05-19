@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import {
   AlertTriangle,
   Crown,
@@ -21,6 +22,13 @@ import MtAccountsManager from "../../components/MtAccountsManager";
 import MtDirectConnect from "../../components/MtDirectConnect";
 
 type TabId = "profile" | "mt" | "settings" | "billing" | "security";
+
+const TAB_IDS = new Set<TabId>(["profile", "mt", "settings", "billing", "security"]);
+
+function parseSettingsTab(raw: string | null): TabId {
+  if (raw && TAB_IDS.has(raw as TabId)) return raw as TabId;
+  return "profile";
+}
 
 type DeviceSession = {
   id: string;
@@ -135,7 +143,17 @@ function SettingsInner() {
   const { user, logout } = useAuth();
   const sub = useSubscription();
   const { theme, setTheme } = useTheme();
-  const [tab, setTab] = useState<TabId>("profile");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [tab, setTab] = useState<TabId>(() => parseSettingsTab(searchParams.get("tab")));
+
+  useEffect(() => {
+    setTab(parseSettingsTab(searchParams.get("tab")));
+  }, [searchParams]);
+
+  const selectTab = (id: TabId) => {
+    setTab(id);
+    setSearchParams(id === "profile" ? {} : { tab: id }, { replace: true });
+  };
   const [prefs, setPrefs] = useState<UserPrefs>(() => loadUserPrefs());
   const [devices, setDevices] = useState<DeviceSession[]>([]);
   const [devicesLoading, setDevicesLoading] = useState(true);
@@ -237,7 +255,7 @@ function SettingsInner() {
               <div className="mt-1 text-xs text-slate-400 dark:text-slate-500">Joined {new Date().getFullYear()}</div>
             </div>
           </div>
-          <UiButton variant="ghost" className="shrink-0 border border-slate-200 dark:border-white/10" onClick={() => setTab("profile")}>
+          <UiButton variant="ghost" className="shrink-0 border border-slate-200 dark:border-white/10" onClick={() => selectTab("profile")}>
             Edit Profile
           </UiButton>
         </div>
@@ -248,7 +266,7 @@ function SettingsInner() {
           <button
             key={t.id}
             type="button"
-            onClick={() => setTab(t.id)}
+            onClick={() => selectTab(t.id)}
             className={`shrink-0 rounded-lg px-3 py-2 text-sm font-medium transition sm:px-4 ${
               tab === t.id
                 ? "bg-white text-blue-700 shadow-sm ring-1 ring-slate-200/80 dark:bg-blue-600 dark:text-white dark:ring-blue-500/40"
@@ -612,7 +630,7 @@ function MtSettingsTab({ cardShell }: { cardShell: (extra?: string) => string })
           Trades from Live Market execute on your broker account only.
         </p>
         <div className="mt-4 flex flex-wrap gap-2">
-          <UiButton href="/app/live-market" variant="primary">
+          <UiButton href="/app/trades" variant="primary">
             Open Live Market
           </UiButton>
         </div>
